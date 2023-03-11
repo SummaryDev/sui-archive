@@ -10,7 +10,10 @@ import (
 	"github.com/xitongsys/parquet-go/writer"
 	rpc "github.com/ybbus/jsonrpc/v3"
 	"log"
+	"os"
 	"reflect"
+	"strconv"
+	"time"
 )
 
 func saveResponse(response *rpc.RPCResponse) EventID {
@@ -22,6 +25,7 @@ func saveResponse(response *rpc.RPCResponse) EventID {
 
 	var nextCursor EventID
 
+	// loop thru properties of response
 	iterResponse := reflect.ValueOf(response.Result).MapRange()
 	for iterResponse.Next() {
 		keyResponse := iterResponse.Key().String()
@@ -92,7 +96,7 @@ func (t *EventSaver) Save(interfaceEvent interface{}, id EventID, timestamp int6
 	json.Unmarshal(j, &e)
 	e.SetId(id)
 	e.SetTimestamp(timestamp)
-	log.Printf("%v %v\n", t.name, e)
+	//log.Printf("%v %v\n", t.name, e)
 
 	err := t.parquetWriter.Write(e)
 	if err != nil {
@@ -113,7 +117,6 @@ func (t *EventSaver) Start() {
 
 	e := reflect.New(t.eventType).Interface()
 	t.parquetWriter, err = writer.NewParquetWriter(t.parquetFile, e, 4)
-
 	if err != nil {
 		log.Fatal("Can't create parquet writer", err)
 	}
@@ -127,14 +130,14 @@ func (t *EventSaver) Stop() {
 	// ParquetWriter
 
 	if err := t.parquetWriter.WriteStop(); err != nil {
-		log.Printf("cannot WriteStop %v %v", t.parquetFilename, err)
+		log.Printf("cannot WriteStop %v %v\n", t.parquetFilename, err)
 		return
 	}
 	log.Printf("finished writing %v\n", t.parquetFilename)
 
 	err := t.parquetFile.Close()
 	if err != nil {
-		log.Printf("cannot Clos %v %v", t.parquetFilename, err)
+		log.Printf("cannot Close %v %v\n", t.parquetFilename, err)
 		return
 	}
 }
@@ -149,7 +152,7 @@ func NewEventSaver(name string) *EventSaver {
 		t.eventType = reflect.TypeOf(PublishEvent{})
 	case "coinBalanceChange":
 		t.eventType = reflect.TypeOf(CoinBalanceChangeEvent{})
-	case "move":
+	case "moveEvent":
 		t.eventType = reflect.TypeOf(MoveEvent{})
 	case "mutateObject":
 		t.eventType = reflect.TypeOf(MutateObjectEvent{})
@@ -167,7 +170,7 @@ var mapEventSaver map[string]*EventSaver
 func startEventSavers() {
 	mapEventSaver = make(map[string]*EventSaver)
 
-	for _, name := range []string{"transferObject", "publish", "coinBalanceChange", "move", "mutateObject", "deleteObject", "newObject"} {
+	for _, name := range []string{"transferObject", "publish", "coinBalanceChange", "moveEvent", "mutateObject", "deleteObject", "newObject"} {
 		saver := NewEventSaver(name)
 		saver.Start()
 		mapEventSaver[name] = saver
@@ -180,31 +183,86 @@ func stopEventSavers() {
 	}
 }
 
+type TimeRange struct {
+	StartTime int64 `json:"startTime"`
+	EndTime   int64 `json:"endTime"`
+}
+type TimeRangeQuery struct {
+	TimeRange TimeRange `json:"TimeRange"`
+}
+
 func main() {
-	log.Println("sui-archive")
+
+	startTimeStr := os.Getenv("SUI_ARCHIVE_START_TIME") //"2023-03-07T00:00:00Z"
+	if startTimeStr == "" {
+		log.Fatalln("specify time to start querying with env like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z")
+	}
+	endTimeStr := os.Getenv("SUI_ARCHIVE_END_TIME") //"2023-03-07T10:00:00Z"
+	if endTimeStr == "" {
+		log.Fatalln("specify time to end querying with env like SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z")
+	}
+
+	var startCursor *EventID
+
+	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
+	cursorEventSeqStr := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"
+	if cursorTxDigest != "" && cursorEventSeqStr != "" {
+		cursorEventSeq, err := strconv.Atoi(cursorEventSeqStr)
+		if err != nil {
+			log.Fatalf("cannot parse SUI_ARCHIVE_CURSOR_EVENTSEQ %v\n", err)
+		}
+
+		startCursor = &EventID{TxDigest: cursorTxDigest, EventSeq: cursorEventSeq}
+	}
+
+	endpoint := os.Getenv("SUI_ARCHIVE_ENDPOINT") // "https://fullnode.devnet.sui.io"
+	if endpoint == "" {
+		endpoint = "https://fullnode.devnet.sui.io"
+	}
+
+	startTime, err := time.Parse(time.RFC3339, startTimeStr)
+	if err != nil {
+		log.Fatalf("startTime %v\n", err)
+	}
+	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		log.Fatalf("endTime %v\n", err)
+	}
+
+	//allQuery := "All"
+	//timeRange := &TimeRange{StartTime: /*startTime.Unix(), EndTime: endTime.Unix()*/ 1678169502291, EndTime: 1678169602291}
+	//1678147200000 1678233600000
+	//1678169402291 1678169502291
+	timeRange := &TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}
+	timeRangeQuery := &TimeRangeQuery{TimeRange: *timeRange}
+
+	method := "sui_getEvents"
+	query := timeRangeQuery
+
+	log.Printf("query %v with %v TimeRangeQuery %v %v %v startCursor is %v\n", endpoint, method, startTime, endTime, timeRangeQuery, startCursor)
 
 	startEventSavers()
 
-	client := rpc.NewClient("https://fullnode.devnet.sui.io")
+	client := rpc.NewClient(endpoint)
 
-	query := "All"
+	log.Printf("startCursor is %v\n", startCursor)
 
-	response, err := client.Call(context.Background(), "sui_getEvents", query, nil)
+	response, err := client.Call(context.Background(), method, query, startCursor)
 	if err != nil {
 		log.Fatalf("Call %v\n", err)
 	}
 
-	cursor := saveResponse(response)
-	log.Printf("first cursor %v\n", cursor)
+	nextCursor := saveResponse(response)
+	log.Printf("after startCursor nextCursor is %v\n", nextCursor)
 
-	//for cursor != (EventID{}) {
-	//	response, err := client.Call(context.Background(), "sui_getEvents", query, cursor)
-	//	if err != nil {
-	//		log.Fatalf("Call %v\n", err)
-	//	}
-	//
-	//	cursor = saveResponse(response)
-	//}
+	for nextCursor != (EventID{}) {
+		response, err := client.Call(context.Background(), "sui_getEvents", query, nextCursor)
+		if err != nil {
+			log.Fatalf("Call %v\n", err)
+		}
+
+		nextCursor = saveResponse(response)
+	}
 
 	stopEventSavers()
 }

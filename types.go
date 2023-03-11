@@ -40,7 +40,7 @@ type TransferObjectEvent struct {
 	Recipient         string `json:"recipient" parquet:"name=recipient, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	ObjectType        string `json:"objectType" parquet:"name=objectType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	ObjectId          string `json:"objectId" parquet:"name=objectId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	Version           uint   `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
+	Version           int    `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
 }
 
 func (t *TransferObjectEvent) SetId(id EventID) {
