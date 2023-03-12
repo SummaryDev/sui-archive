@@ -120,8 +120,8 @@ func (t *EventSaver) Save(interfaceEvent interface{}, id EventID, timestamp int6
 	e = i.(Event)
 	err := json.Unmarshal(j, &e)
 	if err != nil {
-		//log.Fatalf("Unmarshal %v", err)
-		//log.Printf("Unmarshal %v\n", err)
+		log.Fatalf("Unmarshal %v %v", id, err)
+		//log.Printf("Unmarshal %v %v", id, err)
 	}
 	e.SetId(id)
 	e.SetTimestamp(timestamp)
@@ -295,7 +295,7 @@ func main() {
 
 	nextCursor := saveResponse(response)
 
-	log.Printf("after startCursor nextCursor is %v\n", nextCursor)
+	log.Printf("after startCursor %v nextCursor is %v\n", startCursor, nextCursor)
 
 	var failed, done bool
 

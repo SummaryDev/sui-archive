@@ -104,7 +104,10 @@ type CoinBalanceChangeEvent struct {
 	CoinType          string `json:"coinType" parquet:"name=coinType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	CoinObjectId      string `json:"coinObjectId" parquet:"name=coinObjectId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	Version           int    `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
-	Amount            int64  `json:"amount" parquet:"name=amount, type=INT64, convertedtype=UINT_64"` // todo use uint64? can it be large like ethereum's uint256?  Unmarshal json: cannot unmarshal number 18446744073709551615 into Go struct field CoinBalanceChangeEvent.amount of type int64
+	// todo use uint64? can it be large like ethereum's uint256?  Unmarshal json: cannot unmarshal number 18446744073709551615 into Go struct field CoinBalanceChangeEvent.amount of type int64
+	// see https://github.com/xitongsys/parquet-go/issues/419
+	Amount json.Number `json:"amount" parquet:"name=amount, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	//Amount            int64  `json:"amount" parquet:"name=amount, type=INT64, convertedtype=UINT_64"`
 }
 
 func (t *CoinBalanceChangeEvent) SetId(id EventID) {
