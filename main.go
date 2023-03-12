@@ -58,7 +58,8 @@ func saveResponse(response *rpc.RPCResponse) EventID {
 						iterEvent := reflect.ValueOf(interfaceDatum).MapRange()
 						for iterEvent.Next() {
 							keyEvent = iterEvent.Key().String()
-							interfaceEvent = iterEvent.Value().Interface()
+							i := iterEvent.Value().Interface()
+							interfaceEvent = flatten(i.(map[string]interface{}))
 						}
 					}
 				}
@@ -79,8 +80,32 @@ func saveResponse(response *rpc.RPCResponse) EventID {
 	return nextCursor
 }
 
+// flatten takes a map and returns a new one where nested maps are replaced
+// by (maybe dot-delimited) keys.
+func flatten(m map[string]interface{}) map[string]interface{} {
+	o := make(map[string]interface{})
+	for k, v := range m {
+		switch child := v.(type) {
+		case map[string]interface{}:
+			nm := flatten(child)
+			for /*nk*/ _, nv := range nm {
+				nvs := fmt.Sprintf("%v", nv) //todo add child field name to the new key? like fields="validator_address 0x7b53b1ecab7da81205a27bf7fe1edae43a049dcd" or owner="AddressOwner 0x510b4f30c71f0d28061dc04937b8b8ef128c0571"
+				//log.Printf("%v %v %v %v", k, nk, nv, nvs)
+				//o[k+nk] = nvs
+				//o[k+"."+nk] = nv
+				//for _, nv := range nm {
+				o[k] = nvs
+			}
+		default:
+			o[k] = v
+		}
+	}
+	return o
+}
+
 type EventSaver struct {
 	name            string
+	filenamePrefix  string
 	parquetWriter   *writer.ParquetWriter
 	parquetFile     source.ParquetFile
 	parquetFilename string
@@ -93,14 +118,18 @@ func (t *EventSaver) Save(interfaceEvent interface{}, id EventID, timestamp int6
 	i := reflect.New(t.eventType).Interface()
 	var e Event
 	e = i.(Event)
-	json.Unmarshal(j, &e)
+	err := json.Unmarshal(j, &e)
+	if err != nil {
+		//log.Fatalf("Unmarshal %v", err)
+		//log.Printf("Unmarshal %v\n", err)
+	}
 	e.SetId(id)
 	e.SetTimestamp(timestamp)
 	//log.Printf("%v %v\n", t.name, e)
 
-	err := t.parquetWriter.Write(e)
+	err = t.parquetWriter.Write(e)
 	if err != nil {
-		log.Fatalf("Write error %v", err)
+		log.Fatalf("Write %v", err)
 	}
 }
 
@@ -109,7 +138,7 @@ func (t *EventSaver) Start() {
 
 	// ParquetWriter
 
-	t.parquetFilename = fmt.Sprintf("%s.parquet", t.name)
+	t.parquetFilename = fmt.Sprintf("%s%s.parquet", t.name, t.filenamePrefix)
 	t.parquetFile, err = local.NewLocalFileWriter(t.parquetFilename)
 	if err != nil {
 		log.Fatal("Can't create local file", err)
@@ -142,8 +171,8 @@ func (t *EventSaver) Stop() {
 	}
 }
 
-func NewEventSaver(name string) *EventSaver {
-	t := &EventSaver{name: name}
+func NewEventSaver(name string, filenamePrefix string) *EventSaver {
+	t := &EventSaver{name: name, filenamePrefix: filenamePrefix}
 
 	switch t.name {
 	case "transferObject":
@@ -167,11 +196,11 @@ func NewEventSaver(name string) *EventSaver {
 
 var mapEventSaver map[string]*EventSaver
 
-func startEventSavers() {
+func startEventSavers(filenamePrefix string) {
 	mapEventSaver = make(map[string]*EventSaver)
 
 	for _, name := range []string{"transferObject", "publish", "coinBalanceChange", "moveEvent", "mutateObject", "deleteObject", "newObject"} {
-		saver := NewEventSaver(name)
+		saver := NewEventSaver(name, filenamePrefix)
 		saver.Start()
 		mapEventSaver[name] = saver
 	}
@@ -193,13 +222,36 @@ type TimeRangeQuery struct {
 
 func main() {
 
-	startTimeStr := os.Getenv("SUI_ARCHIVE_START_TIME") //"2023-03-07T00:00:00Z"
-	if startTimeStr == "" {
-		log.Fatalln("specify time to start querying with env like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z")
-	}
-	endTimeStr := os.Getenv("SUI_ARCHIVE_END_TIME") //"2023-03-07T10:00:00Z"
-	if endTimeStr == "" {
-		log.Fatalln("specify time to end querying with env like SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z")
+	var startTime, endTime time.Time
+	var err error
+	var filenameSuffix string
+
+	dateStr := os.Getenv("SUI_ARCHIVE_DATE") //"2023-03-07"
+	if dateStr != "" {
+		startTime, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			log.Fatalf("startTime %v\n", err)
+		}
+		endTime = startTime.AddDate(0, 0, 1)
+
+		filenameSuffix = fmt.Sprintf("-%s", dateStr)
+	} else {
+		startTimeStr := os.Getenv("SUI_ARCHIVE_START_TIME") //"2023-03-07T00:00:00Z"
+		endTimeStr := os.Getenv("SUI_ARCHIVE_END_TIME")     //"2023-03-07T10:00:00Z"
+		if startTimeStr == "" || endTimeStr == "" {
+			log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z")
+		}
+
+		startTime, err = time.Parse(time.RFC3339, startTimeStr)
+		if err != nil {
+			log.Fatalf("startTime %v\n", err)
+		}
+		endTime, err = time.Parse(time.RFC3339, endTimeStr)
+		if err != nil {
+			log.Fatalf("endTime %v\n", err)
+		}
+
+		filenameSuffix = fmt.Sprintf("-%s-%s", startTimeStr, endTimeStr)
 	}
 
 	var startCursor *EventID
@@ -220,28 +272,17 @@ func main() {
 		endpoint = "https://fullnode.devnet.sui.io"
 	}
 
-	startTime, err := time.Parse(time.RFC3339, startTimeStr)
-	if err != nil {
-		log.Fatalf("startTime %v\n", err)
-	}
-	endTime, err := time.Parse(time.RFC3339, endTimeStr)
-	if err != nil {
-		log.Fatalf("endTime %v\n", err)
-	}
-
 	//allQuery := "All"
 	//timeRange := &TimeRange{StartTime: /*startTime.Unix(), EndTime: endTime.Unix()*/ 1678169502291, EndTime: 1678169602291}
-	//1678147200000 1678233600000
-	//1678169402291 1678169502291
 	timeRange := &TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}
 	timeRangeQuery := &TimeRangeQuery{TimeRange: *timeRange}
 
 	method := "sui_getEvents"
 	query := timeRangeQuery
 
-	log.Printf("query %v with %v TimeRangeQuery %v %v %v startCursor is %v\n", endpoint, method, startTime, endTime, timeRangeQuery, startCursor)
+	log.Printf("query %v with %v TimeRangeQuery %v %v %v %v\n", endpoint, method, startTime, endTime, timeRangeQuery, startCursor)
 
-	startEventSavers()
+	startEventSavers(filenameSuffix)
 
 	client := rpc.NewClient(endpoint)
 
@@ -249,19 +290,31 @@ func main() {
 
 	response, err := client.Call(context.Background(), method, query, startCursor)
 	if err != nil {
-		log.Fatalf("Call %v\n", err)
+		log.Fatalf("giving up after failed first Call %v\n", err)
 	}
 
 	nextCursor := saveResponse(response)
+
 	log.Printf("after startCursor nextCursor is %v\n", nextCursor)
 
-	for nextCursor != (EventID{}) {
-		response, err := client.Call(context.Background(), "sui_getEvents", query, nextCursor)
-		if err != nil {
-			log.Fatalf("Call %v\n", err)
-		}
+	var failed, done bool
 
-		nextCursor = saveResponse(response)
+	for failed || !done {
+		response, err = client.Call(context.Background(), method, query, nextCursor)
+
+		if err != nil {
+			failed = true
+			log.Printf("retrying after failed Call %v\n", err)
+		} else {
+			failed = false
+
+			nextCursor = saveResponse(response)
+
+			if nextCursor == (EventID{}) {
+				done = true
+				log.Printf("done as received cursor %v\n", nextCursor)
+			}
+		}
 	}
 
 	stopEventSavers()
