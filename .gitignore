@@ -4,6 +4,7 @@ data
 main.js
 sui-archive
 *.parquet
+*.csv
 
 # Logs
 logs

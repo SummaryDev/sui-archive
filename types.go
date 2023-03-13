@@ -15,7 +15,7 @@ type EventID struct {
 func NewEventID(i interface{}) EventID {
 	j, _ := json.Marshal(i)
 	var c EventID
-	json.Unmarshal(j, &c)
+	json.Unmarshal(j, &c) //todo fail on this?
 	return c
 }
 
@@ -93,20 +93,19 @@ func (t *PublishEvent) SetTimestamp(timestamp int64) {
 	});
 */
 type CoinBalanceChangeEvent struct {
-	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
-	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
-	PackageId         string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	TransactionModule string `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	Sender            string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	Owner             string `json:"owner" parquet:"name=owner, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	ChangeType        string `json:"changeType" parquet:"name=changeType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	CoinType          string `json:"coinType" parquet:"name=coinType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	CoinObjectId      string `json:"coinObjectId" parquet:"name=coinObjectId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	Version           int    `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
-	// todo use uint64? can it be large like ethereum's uint256?  Unmarshal json: cannot unmarshal number 18446744073709551615 into Go struct field CoinBalanceChangeEvent.amount of type int64
-	// see https://github.com/xitongsys/parquet-go/issues/419
-	Amount json.Number `json:"amount" parquet:"name=amount, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	TxDigest          string      `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	EventSeq          int         `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
+	Timestamp         int64       `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	PackageId         string      `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	TransactionModule string      `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Sender            string      `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	Owner             string      `json:"owner" parquet:"name=owner, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	ChangeType        string      `json:"changeType" parquet:"name=changeType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CoinType          string      `json:"coinType" parquet:"name=coinType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CoinObjectId      string      `json:"coinObjectId" parquet:"name=coinObjectId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	Version           int         `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
+	Amount            json.Number `json:"amount" parquet:"name=amount, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	// todo use uint64? can it be large like ethereum's uint256?  Unmarshal json: cannot unmarshal number 18446744073709551615 into Go struct field CoinBalanceChangeEvent.amount of type int64; see https://github.com/xitongsys/parquet-go/issues/419
 	//Amount            int64  `json:"amount" parquet:"name=amount, type=INT64, convertedtype=UINT_64"`
 }
 
