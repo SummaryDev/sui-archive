@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/xitongsys/parquet-go-source/local"
-	"github.com/xitongsys/parquet-go/parquet"
-	"github.com/xitongsys/parquet-go/source"
-	"github.com/xitongsys/parquet-go/writer"
+	"github.com/jmoiron/sqlx"
+
+	//_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/stdlib"
 	rpc "github.com/ybbus/jsonrpc/v3"
 	"log"
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -66,7 +67,7 @@ func saveResponse(response *rpc.RPCResponse) EventID {
 
 				saver := mapEventSaver[keyEvent]
 				if saver == nil {
-					log.Printf("cannot handle event %v\n", keyEvent)
+					//log.Printf("cannot handle event %v\n", keyEvent)
 				} else {
 					saver.Save(interfaceEvent, id, timestamp)
 				}
@@ -76,6 +77,8 @@ func saveResponse(response *rpc.RPCResponse) EventID {
 			log.Printf("nextCursor %v\n", nextCursor)
 		}
 	}
+
+	commitEventSavers()
 
 	return nextCursor
 }
@@ -103,106 +106,57 @@ func flatten(m map[string]interface{}) map[string]interface{} {
 	return o
 }
 
-type EventSaver struct {
-	name            string
-	filenamePrefix  string
-	parquetWriter   *writer.ParquetWriter
-	parquetFile     source.ParquetFile
-	parquetFilename string
-	eventType       reflect.Type
-}
+var eventNames = []string{"publish", "transferObject", "coinBalanceChange", "moveEvent", "mutateObject", "deleteObject", "newObject"}
 
-func (t *EventSaver) Save(interfaceEvent interface{}, id EventID, timestamp int64) {
-	j, _ := json.Marshal(interfaceEvent)
+var mapEventSaver = map[string]EventSaver{}
 
-	i := reflect.New(t.eventType).Interface()
-	var e Event
-	e = i.(Event)
-	err := json.Unmarshal(j, &e)
-	if err != nil {
-		log.Fatalf("Unmarshal %v %v", id, err)
-		//log.Printf("Unmarshal %v %v", id, err)
-	}
-	e.SetId(id)
-	e.SetTimestamp(timestamp)
-	//log.Printf("%v %v\n", t.name, e)
-
-	err = t.parquetWriter.Write(e)
-	if err != nil {
-		log.Fatalf("Write %v", err)
-	}
-}
-
-func (t *EventSaver) Start() {
-	var err error
-
-	// ParquetWriter
-
-	t.parquetFilename = fmt.Sprintf("%s%s.parquet", t.name, t.filenamePrefix)
-	t.parquetFile, err = local.NewLocalFileWriter(t.parquetFilename)
-	if err != nil {
-		log.Fatal("Can't create local file", err)
-	}
-
-	e := reflect.New(t.eventType).Interface()
-	t.parquetWriter, err = writer.NewParquetWriter(t.parquetFile, e, 4)
-	if err != nil {
-		log.Fatal("Can't create parquet writer", err)
-	}
-
-	t.parquetWriter.RowGroupSize = 128 * 1024 * 1024 //128M
-	t.parquetWriter.PageSize = 8 * 1024              //8K
-	t.parquetWriter.CompressionType = parquet.CompressionCodec_SNAPPY
-}
-
-func (t *EventSaver) Stop() {
-	// ParquetWriter
-
-	if err := t.parquetWriter.WriteStop(); err != nil {
-		log.Printf("cannot WriteStop %v %v\n", t.parquetFilename, err)
-		return
-	}
-	log.Printf("finished writing %v\n", t.parquetFilename)
-
-	err := t.parquetFile.Close()
-	if err != nil {
-		log.Printf("cannot Close %v %v\n", t.parquetFilename, err)
-		return
-	}
-}
-
-func NewEventSaver(name string, filenamePrefix string) *EventSaver {
-	t := &EventSaver{name: name, filenamePrefix: filenamePrefix}
-
-	switch t.name {
-	case "transferObject":
-		t.eventType = reflect.TypeOf(TransferObjectEvent{})
-	case "publish":
-		t.eventType = reflect.TypeOf(PublishEvent{})
-	case "coinBalanceChange":
-		t.eventType = reflect.TypeOf(CoinBalanceChangeEvent{})
-	case "moveEvent":
-		t.eventType = reflect.TypeOf(MoveEvent{})
-	case "mutateObject":
-		t.eventType = reflect.TypeOf(MutateObjectEvent{})
-	case "deleteObject":
-		t.eventType = reflect.TypeOf(DeleteObjectEvent{})
-	case "newObject":
-		t.eventType = reflect.TypeOf(NewObjectEvent{})
-	}
-
-	return t
-}
-
-var mapEventSaver map[string]*EventSaver
-
-func startEventSavers(filenamePrefix string) {
-	mapEventSaver = make(map[string]*EventSaver)
-
-	for _, name := range []string{"transferObject", "publish", "coinBalanceChange", "moveEvent", "mutateObject", "deleteObject", "newObject"} {
-		saver := NewEventSaver(name, filenamePrefix)
+func startFileEventSavers(filenameSuffix string, folder string) {
+	for _, name := range eventNames {
+		saver := NewFileEventSaver(name, filenameSuffix, folder)
 		saver.Start()
 		mapEventSaver[name] = saver
+	}
+}
+
+func startDatabaseEventSavers(dataSourceName string) {
+	for _, name := range eventNames {
+		saver := NewDatabaseEventSaver(name, dataSourceName)
+		saver.Start()
+		mapEventSaver[name] = saver
+	}
+}
+
+func queryMaxTimestamp(dataSourceName string) time.Time {
+	subqueries := make([]string, len(eventNames))
+
+	i := 0
+	for _, saver := range mapEventSaver {
+		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s", saver.EventType().Name()) /*PublishEvent*/
+		i++
+	}
+
+	db, err := sqlx.Open( /*"postgres"*/ "pgx", dataSourceName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//maxTimestamp = d.QueryTimestamp("select cast(extract(epoch from max(m))::dec*1000 as bigint) from (" + strings.Join(subqueries, " union all ") + ") sub")
+
+	query := fmt.Sprintf("select max(m) from (%s) sub", strings.Join(subqueries, " union all "))
+
+	maxTimestamp := time.Now().UTC()
+	row := db.QueryRow(query)
+	err = row.Scan(&maxTimestamp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return maxTimestamp
+}
+
+func commitEventSavers() {
+	for _, saver := range mapEventSaver {
+		saver.Commit()
 	}
 }
 
@@ -216,17 +170,29 @@ type TimeRange struct {
 	StartTime int64 `json:"startTime"`
 	EndTime   int64 `json:"endTime"`
 }
+
 type TimeRangeQuery struct {
 	TimeRange TimeRange `json:"TimeRange"`
 }
 
-func main() {
+func (t *TimeRangeQuery) String() string {
+	return fmt.Sprintf("StartTime %v %v EndTime %v %v", t.TimeRange.StartTime, time.UnixMilli(t.TimeRange.StartTime).UTC(), t.TimeRange.EndTime, time.UnixMilli(t.TimeRange.EndTime).UTC())
+}
+
+func NewTimeRangeQuery(startTime time.Time, endTime time.Time) *TimeRangeQuery {
+	return &TimeRangeQuery{TimeRange: TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}}
+}
+
+func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix string, startCursor *EventID, cronSeconds int, dataSourceName string, folder string) {
+	var err error
 
 	var startTime, endTime time.Time
-	var err error
-	var filenameSuffix string
 
-	dateStr := os.Getenv("SUI_ARCHIVE_DATE") //"2023-03-07"
+	dateStr := os.Getenv("SUI_ARCHIVE_DATE")            //"2023-03-07"
+	startTimeStr := os.Getenv("SUI_ARCHIVE_START_TIME") //"2023-03-07T00:00:00Z"
+	endTimeStr := os.Getenv("SUI_ARCHIVE_END_TIME")     //"2023-03-07T10:00:00Z"
+	cronStr := os.Getenv("SUI_ARCHIVE_CRON_SECONDS")    //60
+
 	if dateStr != "" {
 		startTime, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
@@ -235,13 +201,7 @@ func main() {
 		endTime = startTime.AddDate(0, 0, 1)
 
 		filenameSuffix = fmt.Sprintf("-%s", dateStr)
-	} else {
-		startTimeStr := os.Getenv("SUI_ARCHIVE_START_TIME") //"2023-03-07T00:00:00Z"
-		endTimeStr := os.Getenv("SUI_ARCHIVE_END_TIME")     //"2023-03-07T10:00:00Z"
-		if startTimeStr == "" || endTimeStr == "" {
-			log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z")
-		}
-
+	} else if startTimeStr != "" && endTimeStr != "" {
 		startTime, err = time.Parse(time.RFC3339, startTimeStr)
 		if err != nil {
 			log.Fatalf("startTime %v\n", err)
@@ -252,9 +212,18 @@ func main() {
 		}
 
 		filenameSuffix = fmt.Sprintf("-%s-%s", startTimeStr, endTimeStr)
+	} else if cronStr != "" {
+		cronSeconds, err = strconv.Atoi(cronStr)
+		if err != nil {
+			log.Fatalf("cronStr %v\n", err)
+		}
+	} else {
+		log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z")
 	}
 
-	var startCursor *EventID
+	//allQuery := "All"
+	//timeRange := &TimeRange{StartTime: /*startTime.Unix(), EndTime: endTime.Unix()*/ 1678169502291, EndTime: 1678169602291}
+	timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
 
 	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
 	cursorEventSeqStr := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"
@@ -267,28 +236,36 @@ func main() {
 		startCursor = &EventID{TxDigest: cursorTxDigest, EventSeq: cursorEventSeq}
 	}
 
-	endpoint := os.Getenv("SUI_ARCHIVE_ENDPOINT") // "https://fullnode.devnet.sui.io"
+	endpoint = os.Getenv("SUI_ARCHIVE_ENDPOINT") // "https://fullnode.devnet.sui.io"
 	if endpoint == "" {
 		endpoint = "https://fullnode.devnet.sui.io"
 	}
 
-	//allQuery := "All"
-	//timeRange := &TimeRange{StartTime: /*startTime.Unix(), EndTime: endTime.Unix()*/ 1678169502291, EndTime: 1678169602291}
-	timeRange := &TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}
-	timeRangeQuery := &TimeRangeQuery{TimeRange: *timeRange}
+	schema := os.Getenv("SUI_ARCHIVE_SCHEMA")
+	if schema == "" {
+		schema = "sui_devnet"
+	}
 
+	dataSourceName = fmt.Sprintf("host=%v dbname=%v user=%v password=%v search_path=%v", os.Getenv("PGHOST"), os.Getenv("PGDATABASE"), os.Getenv("PGUSER"), os.Getenv("PGPASSWORD"), schema)
+
+	folder = os.Getenv("SUI_ARCHIVE_FOLDER") // "./sui-archive-data"
+	if folder == "" {
+		folder = "."
+	}
+
+	return endpoint, timeRangeQuery, filenameSuffix, startCursor, cronSeconds, dataSourceName, folder
+}
+
+func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *EventID) (nomore bool) {
 	method := "sui_getEvents"
-	query := timeRangeQuery
 
-	log.Printf("query %v with %v TimeRangeQuery %v %v %v %v\n", endpoint, method, startTime, endTime, timeRangeQuery, startCursor)
-
-	startEventSavers(filenameSuffix)
+	log.Printf("query %v with %v TimeRangeQuery %v %v\n", endpoint, method, timeRangeQuery, startCursor)
 
 	client := rpc.NewClient(endpoint)
 
 	log.Printf("startCursor is %v\n", startCursor)
 
-	response, err := client.Call(context.Background(), method, query, startCursor)
+	response, err := client.Call(context.Background(), method, timeRangeQuery, startCursor)
 	if err != nil {
 		log.Fatalf("giving up after failed first Call %v\n", err)
 	}
@@ -300,11 +277,24 @@ func main() {
 	var failed, done bool
 
 	for failed || !done {
-		response, err = client.Call(context.Background(), method, query, nextCursor)
+		response, err = client.Call(context.Background(), method, timeRangeQuery, nextCursor)
 
 		if err != nil {
 			failed = true
-			log.Printf("retrying after failed Call %v\n", err)
+			log.Printf("retrying after Call failed with err=%v\n", err)
+		} else if response == nil {
+			failed = true
+			log.Printf("retrying after Call failed with response=%v\n", response)
+		} else if response.Error != nil {
+			if response.Error.Code == -32602 {
+				done = true
+				nomore = true
+				log.Printf("done as received indication there are no more events with response.Error=%v\n", response.Error)
+			} else {
+				failed = true
+				log.Printf("retrying after Call failed with response.Error=%v %v\n", response.Error)
+			}
+
 		} else {
 			failed = false
 
@@ -317,5 +307,57 @@ func main() {
 		}
 	}
 
-	stopEventSavers()
+	return nomore
+}
+
+func main() {
+	endpoint, timeRangeQuery, filenameSuffix, startCursor, cronSeconds, dataSourceName, folder := getArgs()
+
+	if cronSeconds > 0 {
+		window := time.Duration(cronSeconds) * time.Second //10
+		sleep := time.Duration(cronSeconds/2) * time.Second
+
+		startDatabaseEventSavers(dataSourceName)
+
+		//scheduler := gocron.NewScheduler(time.UTC)
+		//
+		//_, err := scheduler.Every(cronSeconds).Seconds().Do(func() {
+
+		for {
+			log.Printf("repeating query for events in a %v window", window)
+
+			maxTimestamp := queryMaxTimestamp(dataSourceName)
+			nextTimestamp := maxTimestamp.Add(time.Millisecond)
+
+			//log.Printf("latest of all events is maxTimestamp=%v %v, starting query with nextTimestamp=%v %v", maxTimestamp.UnixMilli(), maxTimestamp.UTC(), nextTimestamp.UnixMilli(), nextTimestamp.UTC())
+
+			startTime := nextTimestamp
+			//endTime := time.Now().AddDate(0, 0, -5) /*maxTimestamp.UnixMilli() + 60_000*60*24*/
+			//endTime := startTime.AddDate(0, 0, 1)
+			endTime := startTime.Add(window)
+
+			unsavedEventsQuery := NewTimeRangeQuery(startTime, endTime)
+			nomore := queryTimeRange(endpoint, unsavedEventsQuery, nil)
+
+			if nomore {
+				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
+				time.Sleep(sleep)
+			}
+		}
+
+		//})
+		//if err != nil {
+		//	log.Fatalf("cannot schedule job %v", err)
+		//}
+		//log.Printf("scheduled query to run every %v seconds", cronSeconds)
+		//
+		//scheduler.StartBlocking()
+
+		stopEventSavers()
+
+	} else {
+		startFileEventSavers(filenameSuffix, folder)
+		queryTimeRange(endpoint, timeRangeQuery, startCursor)
+		stopEventSavers()
+	}
 }

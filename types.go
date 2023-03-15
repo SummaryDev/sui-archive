@@ -1,10 +1,16 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"log"
+	"time"
+)
 
 type Event interface {
 	SetId(id EventID)
 	SetTimestamp(timestamp int64)
+	InsertQuery() string
+	GetTimestamp() time.Time
 }
 
 type EventID struct {
@@ -34,6 +40,7 @@ type TransferObjectEvent struct {
 	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
 	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb       time.Time
 	PackageId         string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	TransactionModule string `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sender            string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
@@ -50,6 +57,19 @@ func (t *TransferObjectEvent) SetId(id EventID) {
 
 func (t *TransferObjectEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *TransferObjectEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *TransferObjectEvent) InsertQuery() string {
+	return "insert into TransferObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, recipient, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :recipient, :objecttype, :objectid, :version)"
 }
 
 /*
@@ -61,13 +81,14 @@ func (t *TransferObjectEvent) SetTimestamp(timestamp int64) {
 	});
 */
 type PublishEvent struct {
-	TxDigest  string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	EventSeq  int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
-	Timestamp int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
-	Sender    string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	PackageId string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	Version   int    `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
-	Digest    string `json:"digest" parquet:"name=digest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	TxDigest    string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	EventSeq    int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
+	Timestamp   int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb time.Time
+	Sender      string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	PackageId   string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Version     int    `json:"version" parquet:"name=version, type=INT32, convertedtype=UINT_32"`
+	Digest      string `json:"digest" parquet:"name=digest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 }
 
 func (t *PublishEvent) SetId(id EventID) {
@@ -77,6 +98,19 @@ func (t *PublishEvent) SetId(id EventID) {
 
 func (t *PublishEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *PublishEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *PublishEvent) InsertQuery() string {
+	return "insert into PublishEvent (txDigest, eventSeq, timestamp, sender, packageId, version, digest) values (:txdigest, :eventseq, :timestampdb, :sender, :packageid, :version, :digest)"
 }
 
 /*
@@ -93,9 +127,10 @@ func (t *PublishEvent) SetTimestamp(timestamp int64) {
 	});
 */
 type CoinBalanceChangeEvent struct {
-	TxDigest          string      `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
-	EventSeq          int         `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
-	Timestamp         int64       `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
+	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
+	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb       time.Time
 	PackageId         string      `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	TransactionModule string      `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sender            string      `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
@@ -116,6 +151,19 @@ func (t *CoinBalanceChangeEvent) SetId(id EventID) {
 
 func (t *CoinBalanceChangeEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *CoinBalanceChangeEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *CoinBalanceChangeEvent) InsertQuery() string {
+	return "insert into CoinBalanceChangeEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, owner, changeType, coinType, coinObjectId, version, amount) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :owner, :changetype, :cointype, :coinobjectid, :version, :amount)"
 }
 
 /*
@@ -132,6 +180,7 @@ type MoveEvent struct {
 	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
 	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb       time.Time
 	PackageId         string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	TransactionModule string `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sender            string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
@@ -147,6 +196,19 @@ func (t *MoveEvent) SetId(id EventID) {
 
 func (t *MoveEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *MoveEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *MoveEvent) InsertQuery() string {
+	return "insert into MoveEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, type, fields, bcs) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :type, :fields, :bcs)"
 }
 
 /*
@@ -163,6 +225,7 @@ type MutateObjectEvent struct {
 	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
 	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb       time.Time
 	PackageId         string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	TransactionModule string `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sender            string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
@@ -178,6 +241,19 @@ func (t *MutateObjectEvent) SetId(id EventID) {
 
 func (t *MutateObjectEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *MutateObjectEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *MutateObjectEvent) InsertQuery() string {
+	return "insert into MutateObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :objecttype, :objectid, :version)"
 }
 
 /*
@@ -193,6 +269,7 @@ type DeleteObjectEvent struct {
 	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
 	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb       time.Time
 	PackageId         string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	TransactionModule string `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sender            string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
@@ -207,6 +284,19 @@ func (t *DeleteObjectEvent) SetId(id EventID) {
 
 func (t *DeleteObjectEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *DeleteObjectEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *DeleteObjectEvent) InsertQuery() string {
+	return "insert into DeleteObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :objectid, :version)"
 }
 
 /*
@@ -224,6 +314,7 @@ type NewObjectEvent struct {
 	TxDigest          string `json:"txDigest" parquet:"name=txDigest, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
 	EventSeq          int    `json:"eventSeq" parquet:"name=eventSeq, type=INT32, convertedtype=UINT_32"`
 	Timestamp         int64  `json:"timestamp" parquet:"name=timestamp, type=INT64, convertedtype=TIMESTAMP_MILLIS"`
+	TimestampDb       time.Time
 	PackageId         string `json:"packageId" parquet:"name=packageId, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	TransactionModule string `json:"transactionModule" parquet:"name=transactionModule, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sender            string `json:"sender" parquet:"name=sender, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN"`
@@ -240,6 +331,19 @@ func (t *NewObjectEvent) SetId(id EventID) {
 
 func (t *NewObjectEvent) SetTimestamp(timestamp int64) {
 	t.Timestamp = timestamp
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t.TimestampDb = time.UnixMilli(timestamp).In(loc)
+}
+
+func (t *NewObjectEvent) GetTimestamp() time.Time {
+	return t.TimestampDb
+}
+
+func (t *NewObjectEvent) InsertQuery() string {
+	return "insert into NewObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, recipient, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :recipient, :objecttype, :objectid, :version)"
 }
 
 /*
