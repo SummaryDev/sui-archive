@@ -5,6 +5,7 @@ main.js
 sui-archive
 *.parquet
 *.csv
+scratch.txt
 
 # Logs
 logs

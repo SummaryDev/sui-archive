@@ -18,11 +18,11 @@ type EventID struct {
 	EventSeq int    `json:"eventSeq"`
 }
 
-func NewEventID(i interface{}) EventID {
+func NewEventID(i interface{}) *EventID {
 	j, _ := json.Marshal(i)
-	var c EventID
-	json.Unmarshal(j, &c) //todo fail on this?
-	return c
+	o := &EventID{}
+	json.Unmarshal(j, o) //todo fail on this?
+	return o
 }
 
 /*

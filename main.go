@@ -17,14 +17,14 @@ import (
 	"time"
 )
 
-func saveResponse(response *rpc.RPCResponse) EventID {
+func saveResponse(response *rpc.RPCResponse) *EventID {
 	if response.Error != nil {
 		// rpc error handling goes here
 		// check response.Error.Code, response.Error.Message and optional response.Error.Data
 		log.Fatalf("rpc response error %v\n", response.Error)
 	}
 
-	var nextCursor EventID
+	var nextCursor *EventID
 
 	// loop thru properties of response
 	iterResponse := reflect.ValueOf(response.Result).MapRange()
@@ -53,7 +53,7 @@ func saveResponse(response *rpc.RPCResponse) EventID {
 					case "timestamp":
 						timestamp, _ = iterDatum.Value().Interface().(json.Number).Int64()
 					case "id":
-						id = NewEventID(interfaceDatum)
+						id = *NewEventID(interfaceDatum)
 					case "event":
 						// the only child of the event property is a specific event: publish, newObject etc.
 						iterEvent := reflect.ValueOf(interfaceDatum).MapRange()
@@ -150,6 +150,8 @@ func queryMaxTimestamp(dataSourceName string) time.Time {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	db.Close()
 
 	return maxTimestamp
 }
@@ -265,19 +267,21 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 
 	log.Printf("startCursor is %v\n", startCursor)
 
-	response, err := client.Call(context.Background(), method, timeRangeQuery, startCursor)
-	if err != nil {
-		log.Fatalf("giving up after failed first Call %v\n", err)
-	}
-
-	nextCursor := saveResponse(response)
-
-	log.Printf("after startCursor %v nextCursor is %v\n", startCursor, nextCursor)
+	//response, err := client.Call(context.Background(), method, timeRangeQuery, startCursor)
+	//if err != nil {
+	//	log.Fatalf("giving up after failed first Call %v\n", err)
+	//}
+	//
+	//nextCursor := saveResponse(response)
+	//
+	//log.Printf("after startCursor %v nextCursor is %v\n", startCursor, nextCursor)
 
 	var failed, done bool
 
+	nextCursor := startCursor
+
 	for failed || !done {
-		response, err = client.Call(context.Background(), method, timeRangeQuery, nextCursor)
+		response, err := client.Call(context.Background(), method, timeRangeQuery, nextCursor)
 
 		if err != nil {
 			failed = true
@@ -289,10 +293,14 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 			if response.Error.Code == -32602 {
 				done = true
 				nomore = true
-				log.Printf("done as received indication there are no more events with response.Error=%v\n", response.Error)
+				log.Printf("done as received indication there are no more events: %v\n", response.Error)
+				//} else if response.Error.Code == -32000 {
+				//	done = true
+				//	nomore = true
+				//	log.Printf("done as received an error we cannot recover from: %v\n", response.Error)
 			} else {
 				failed = true
-				log.Printf("retrying after Call failed with response.Error=%v %v\n", response.Error)
+				log.Printf("retrying after Call failed with %v\n", response.Error)
 			}
 
 		} else {
@@ -300,7 +308,7 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 
 			nextCursor = saveResponse(response)
 
-			if nextCursor == (EventID{}) {
+			if *nextCursor == (EventID{}) {
 				done = true
 				log.Printf("done as received cursor %v\n", nextCursor)
 			}
@@ -317,14 +325,14 @@ func main() {
 		window := time.Duration(cronSeconds) * time.Second //10
 		sleep := time.Duration(cronSeconds/2) * time.Second
 
-		startDatabaseEventSavers(dataSourceName)
-
 		//scheduler := gocron.NewScheduler(time.UTC)
 		//
 		//_, err := scheduler.Every(cronSeconds).Seconds().Do(func() {
 
 		for {
 			log.Printf("repeating query for events in a %v window", window)
+
+			startDatabaseEventSavers(dataSourceName)
 
 			maxTimestamp := queryMaxTimestamp(dataSourceName)
 			nextTimestamp := maxTimestamp.Add(time.Millisecond)
@@ -339,6 +347,8 @@ func main() {
 			unsavedEventsQuery := NewTimeRangeQuery(startTime, endTime)
 			nomore := queryTimeRange(endpoint, unsavedEventsQuery, nil)
 
+			stopEventSavers()
+
 			if nomore {
 				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
 				time.Sleep(sleep)
@@ -352,8 +362,6 @@ func main() {
 		//log.Printf("scheduled query to run every %v seconds", cronSeconds)
 		//
 		//scheduler.StartBlocking()
-
-		stopEventSavers()
 
 	} else {
 		startFileEventSavers(filenameSuffix, folder)

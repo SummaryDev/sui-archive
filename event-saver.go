@@ -143,6 +143,7 @@ func (t *DatabaseEventSaver) Start() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	//t.db.SetMaxOpenConns(8)
 }
 
 func (t *DatabaseEventSaver) Save(interfaceEvent interface{}, id EventID, timestamp int64) {
