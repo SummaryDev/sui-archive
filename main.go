@@ -126,32 +126,56 @@ func startDatabaseEventSavers(dataSourceName string) {
 	}
 }
 
-func queryMaxTimestamp(dataSourceName string) time.Time {
+func timeFromRange(timeRangeQuery *TimeRangeQuery) (startTimeArg time.Time, endTimeArg time.Time) {
+	startTimeArg = time.UnixMilli(timeRangeQuery.TimeRange.StartTime).In(time.UTC)
+	endTimeArg = time.UnixMilli(timeRangeQuery.TimeRange.EndTime).In(time.UTC)
+	return startTimeArg, endTimeArg
+}
+
+func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) time.Time {
 	subqueries := make([]string, len(eventNames))
+
+	var where string
+	var startTimeArg, endTimeArg time.Time
+
+	if timeRangeQuery != nil {
+		startTimeArg, endTimeArg = timeFromRange(timeRangeQuery)
+		where = fmt.Sprintf("where timestamp between '%v' and '%v'", startTimeArg.Format(time.RFC3339), endTimeArg.Format(time.RFC3339))
+		//where = fmt.Sprintf("where timestamp > '%v'", startTimeArg.Format(time.RFC3339))
+	}
 
 	i := 0
 	for _, saver := range mapEventSaver {
-		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s", saver.EventType().Name()) /*PublishEvent*/
+		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s %s", saver.EventType().Name(), where)
 		i++
 	}
+
+	query := fmt.Sprintf("select max(m) from (%s) sub", strings.Join(subqueries, " union all "))
 
 	db, err := sqlx.Open( /*"postgres"*/ "pgx", dataSourceName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	//maxTimestamp = d.QueryTimestamp("select cast(extract(epoch from max(m))::dec*1000 as bigint) from (" + strings.Join(subqueries, " union all ") + ") sub")
-
-	query := fmt.Sprintf("select max(m) from (%s) sub", strings.Join(subqueries, " union all "))
-
 	maxTimestamp := time.Now().UTC()
 	row := db.QueryRow(query)
-	err = row.Scan(&maxTimestamp)
+
+	if timeRangeQuery != nil {
+		err = row.Scan(&maxTimestamp)
+		if err != nil {
+			maxTimestamp = startTimeArg
+		}
+	} else {
+		err = row.Scan(&maxTimestamp)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	err = db.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	db.Close()
 
 	return maxTimestamp
 }
@@ -185,6 +209,22 @@ func NewTimeRangeQuery(startTime time.Time, endTime time.Time) *TimeRangeQuery {
 	return &TimeRangeQuery{TimeRange: TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}}
 }
 
+func parseTimeFromDateStr(s string) time.Time {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		log.Fatalf("parseTimeFromDateStr %v %v\n", s, err)
+	}
+	return t
+}
+
+func parseTimeFromTimeStr(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		log.Fatalf("parseTimeFromTimeStr %v %v\n", s, err)
+	}
+	return t
+}
+
 func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix string, startCursor *EventID, cronSeconds int, dataSourceName string, folder string) {
 	var err error
 
@@ -196,35 +236,30 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 	cronStr := os.Getenv("SUI_ARCHIVE_CRON_SECONDS")    //60
 
 	if dateStr != "" {
-		startTime, err = time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			log.Fatalf("startTime %v\n", err)
-		}
+		startTime = parseTimeFromDateStr(dateStr)
 		endTime = startTime.AddDate(0, 0, 1)
 
 		filenameSuffix = fmt.Sprintf("-%s", dateStr)
-	} else if startTimeStr != "" && endTimeStr != "" {
-		startTime, err = time.Parse(time.RFC3339, startTimeStr)
-		if err != nil {
-			log.Fatalf("startTime %v\n", err)
-		}
-		endTime, err = time.Parse(time.RFC3339, endTimeStr)
-		if err != nil {
-			log.Fatalf("endTime %v\n", err)
-		}
+	}
+
+	if startTimeStr != "" && endTimeStr != "" {
+		startTime = parseTimeFromTimeStr(startTimeStr)
+		endTime = parseTimeFromTimeStr(endTimeStr)
 
 		filenameSuffix = fmt.Sprintf("-%s-%s", startTimeStr, endTimeStr)
-	} else if cronStr != "" {
+	}
+
+	if cronStr != "" {
 		cronSeconds, err = strconv.Atoi(cronStr)
 		if err != nil {
 			log.Fatalf("cronStr %v\n", err)
 		}
-	} else {
+	}
+
+	if cronStr == "" && (startTimeStr == "" && endTimeStr == "") && dateStr == "" {
 		log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z")
 	}
 
-	//allQuery := "All"
-	//timeRange := &TimeRange{StartTime: /*startTime.Unix(), EndTime: endTime.Unix()*/ 1678169502291, EndTime: 1678169602291}
 	timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
 
 	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
@@ -325,24 +360,45 @@ func main() {
 		window := time.Duration(cronSeconds) * time.Second //10
 		sleep := time.Duration(cronSeconds/2) * time.Second
 
-		//scheduler := gocron.NewScheduler(time.UTC)
-		//
-		//_, err := scheduler.Every(cronSeconds).Seconds().Do(func() {
-
 		for {
 			log.Printf("repeating query for events in a %v window", window)
 
 			startDatabaseEventSavers(dataSourceName)
 
-			maxTimestamp := queryMaxTimestamp(dataSourceName)
+			maxTimestamp := queryMaxTimestamp(dataSourceName, timeRangeQuery)
 			nextTimestamp := maxTimestamp.Add(time.Millisecond)
+
+			var startTime, endTime, endWindow time.Time
 
 			//log.Printf("latest of all events is maxTimestamp=%v %v, starting query with nextTimestamp=%v %v", maxTimestamp.UnixMilli(), maxTimestamp.UTC(), nextTimestamp.UnixMilli(), nextTimestamp.UTC())
 
-			startTime := nextTimestamp
-			//endTime := time.Now().AddDate(0, 0, -5) /*maxTimestamp.UnixMilli() + 60_000*60*24*/
-			//endTime := startTime.AddDate(0, 0, 1)
-			endTime := startTime.Add(window)
+			if timeRangeQuery != nil {
+				startTimeArg, endTimeArg := timeFromRange(timeRangeQuery)
+
+				if endTimeArg.Before(nextTimestamp) {
+					log.Fatalf("end time of the time range %v is past the latest timestamp %v in the database, quitting as makes no sense to query\n", timeRangeQuery, nextTimestamp)
+				}
+				if endTimeArg.After(nextTimestamp) && startTimeArg.Before(nextTimestamp) {
+					log.Printf("start time of the time range %v is before the latest timestamp %v in the database, will ignore the start time and query from the latest timestamp to the end of the time range\n", timeRangeQuery, nextTimestamp)
+					startTime = nextTimestamp
+				}
+				if endTimeArg.After(nextTimestamp) && startTimeArg.After(nextTimestamp) {
+					log.Printf("both start and end times of the time range %v are after the latest timestamp %v in the database, will ignore the latest timestamp and query from start to end of the time range\n", timeRangeQuery, nextTimestamp)
+					startTime = startTimeArg
+				}
+
+				endWindow = startTime.Add(window)
+
+				if endWindow.After(endTimeArg) {
+					endTime = endTimeArg
+				} else {
+					endTime = endWindow
+				}
+			} else {
+				log.Printf("will query from the latest timestamp %v in the database within a window %v\n", nextTimestamp, window)
+				startTime = nextTimestamp
+				endTime = startTime.Add(window)
+			}
 
 			unsavedEventsQuery := NewTimeRangeQuery(startTime, endTime)
 			nomore := queryTimeRange(endpoint, unsavedEventsQuery, nil)
@@ -353,15 +409,7 @@ func main() {
 				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
 				time.Sleep(sleep)
 			}
-		}
-
-		//})
-		//if err != nil {
-		//	log.Fatalf("cannot schedule job %v", err)
-		//}
-		//log.Printf("scheduled query to run every %v seconds", cronSeconds)
-		//
-		//scheduler.StartBlocking()
+		} // todo replace infinite loop with another mechanism perhaps reacting to program termination signals
 
 	} else {
 		startFileEventSavers(filenameSuffix, folder)
