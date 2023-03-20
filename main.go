@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jmoiron/sqlx"
-
 	//_ "github.com/lib/pq"
 	_ "github.com/jackc/pgx/stdlib"
 	rpc "github.com/ybbus/jsonrpc/v3"
@@ -13,7 +11,6 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -126,60 +123,6 @@ func startDatabaseEventSavers(dataSourceName string) {
 	}
 }
 
-func timeFromRange(timeRangeQuery *TimeRangeQuery) (startTimeArg time.Time, endTimeArg time.Time) {
-	startTimeArg = time.UnixMilli(timeRangeQuery.TimeRange.StartTime).In(time.UTC)
-	endTimeArg = time.UnixMilli(timeRangeQuery.TimeRange.EndTime).In(time.UTC)
-	return startTimeArg, endTimeArg
-}
-
-func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) time.Time {
-	subqueries := make([]string, len(eventNames))
-
-	var where string
-	var startTimeArg, endTimeArg time.Time
-
-	if timeRangeQuery != nil {
-		startTimeArg, endTimeArg = timeFromRange(timeRangeQuery)
-		where = fmt.Sprintf("where timestamp between '%v' and '%v'", startTimeArg.Format(time.RFC3339), endTimeArg.Format(time.RFC3339))
-		//where = fmt.Sprintf("where timestamp > '%v'", startTimeArg.Format(time.RFC3339))
-	}
-
-	i := 0
-	for _, saver := range mapEventSaver {
-		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s %s", saver.EventType().Name(), where)
-		i++
-	}
-
-	query := fmt.Sprintf("select max(m) from (%s) sub", strings.Join(subqueries, " union all "))
-
-	db, err := sqlx.Open( /*"postgres"*/ "pgx", dataSourceName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	maxTimestamp := time.Now().UTC()
-	row := db.QueryRow(query)
-
-	if timeRangeQuery != nil {
-		err = row.Scan(&maxTimestamp)
-		if err != nil {
-			maxTimestamp = startTimeArg
-		}
-	} else {
-		err = row.Scan(&maxTimestamp)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	err = db.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return maxTimestamp
-}
-
 func commitEventSavers() {
 	for _, saver := range mapEventSaver {
 		saver.Commit()
@@ -190,39 +133,6 @@ func stopEventSavers() {
 	for _, saver := range mapEventSaver {
 		saver.Stop()
 	}
-}
-
-type TimeRange struct {
-	StartTime int64 `json:"startTime"`
-	EndTime   int64 `json:"endTime"`
-}
-
-type TimeRangeQuery struct {
-	TimeRange TimeRange `json:"TimeRange"`
-}
-
-func (t *TimeRangeQuery) String() string {
-	return fmt.Sprintf("StartTime %v %v EndTime %v %v", t.TimeRange.StartTime, time.UnixMilli(t.TimeRange.StartTime).UTC(), t.TimeRange.EndTime, time.UnixMilli(t.TimeRange.EndTime).UTC())
-}
-
-func NewTimeRangeQuery(startTime time.Time, endTime time.Time) *TimeRangeQuery {
-	return &TimeRangeQuery{TimeRange: TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}}
-}
-
-func parseTimeFromDateStr(s string) time.Time {
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		log.Fatalf("parseTimeFromDateStr %v %v\n", s, err)
-	}
-	return t
-}
-
-func parseTimeFromTimeStr(s string) time.Time {
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		log.Fatalf("parseTimeFromTimeStr %v %v\n", s, err)
-	}
-	return t
 }
 
 func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix string, startCursor *EventID, cronSeconds int, dataSourceName string, folder string) {
@@ -361,48 +271,11 @@ func main() {
 		sleep := time.Duration(cronSeconds/2) * time.Second
 
 		for {
-			log.Printf("repeating query for events in a %v window", window)
+			query := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
+			log.Printf("repeating query for events in a %v window with %v", window, query)
 
 			startDatabaseEventSavers(dataSourceName)
-
-			maxTimestamp := queryMaxTimestamp(dataSourceName, timeRangeQuery)
-			nextTimestamp := maxTimestamp.Add(time.Millisecond)
-
-			var startTime, endTime, endWindow time.Time
-
-			//log.Printf("latest of all events is maxTimestamp=%v %v, starting query with nextTimestamp=%v %v", maxTimestamp.UnixMilli(), maxTimestamp.UTC(), nextTimestamp.UnixMilli(), nextTimestamp.UTC())
-
-			if timeRangeQuery != nil {
-				startTimeArg, endTimeArg := timeFromRange(timeRangeQuery)
-
-				if endTimeArg.Before(nextTimestamp) {
-					log.Fatalf("end time of the time range %v is past the latest timestamp %v in the database, quitting as makes no sense to query\n", timeRangeQuery, nextTimestamp)
-				}
-				if endTimeArg.After(nextTimestamp) && startTimeArg.Before(nextTimestamp) {
-					log.Printf("start time of the time range %v is before the latest timestamp %v in the database, will ignore the start time and query from the latest timestamp to the end of the time range\n", timeRangeQuery, nextTimestamp)
-					startTime = nextTimestamp
-				}
-				if endTimeArg.After(nextTimestamp) && startTimeArg.After(nextTimestamp) {
-					log.Printf("both start and end times of the time range %v are after the latest timestamp %v in the database, will ignore the latest timestamp and query from start to end of the time range\n", timeRangeQuery, nextTimestamp)
-					startTime = startTimeArg
-				}
-
-				endWindow = startTime.Add(window)
-
-				if endWindow.After(endTimeArg) {
-					endTime = endTimeArg
-				} else {
-					endTime = endWindow
-				}
-			} else {
-				log.Printf("will query from the latest timestamp %v in the database within a window %v\n", nextTimestamp, window)
-				startTime = nextTimestamp
-				endTime = startTime.Add(window)
-			}
-
-			unsavedEventsQuery := NewTimeRangeQuery(startTime, endTime)
-			nomore := queryTimeRange(endpoint, unsavedEventsQuery, nil)
-
+			nomore := queryTimeRange(endpoint, query, nil)
 			stopEventSavers()
 
 			if nomore {
