@@ -212,15 +212,6 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 
 	log.Printf("startCursor is %v\n", startCursor)
 
-	//response, err := client.Call(context.Background(), method, timeRangeQuery, startCursor)
-	//if err != nil {
-	//	log.Fatalf("giving up after failed first Call %v\n", err)
-	//}
-	//
-	//nextCursor := saveResponse(response)
-	//
-	//log.Printf("after startCursor %v nextCursor is %v\n", startCursor, nextCursor)
-
 	var failed, done bool
 
 	nextCursor := startCursor
@@ -230,7 +221,19 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 
 		if err != nil {
 			failed = true
-			log.Printf("retrying after Call failed with err=%v\n", err)
+
+			switch e := err.(type) {
+			case *rpc.HTTPError:
+				if e.Code == 429 {
+					log.Printf("sleeping for 10s then retrying after Call failed with err=%v\n", err)
+					time.Sleep(time.Second * 10)
+				} else {
+					log.Printf("retrying immediately after Call failed with err=%v\n", err)
+				}
+			default:
+				log.Fatalf("quitting after Call failed with unknown err=%v\n", err)
+			}
+
 		} else if response == nil {
 			failed = true
 			log.Printf("retrying after Call failed with response=%v\n", response)
