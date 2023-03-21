@@ -95,7 +95,7 @@ func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) ti
 	return maxTimestamp
 }
 
-func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, window time.Duration) *TimeRangeQuery {
+func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, window time.Duration) (query *TimeRangeQuery, final bool) {
 	maxTimestamp := queryMaxTimestamp(dataSourceName, timeRangeQuery)
 	nextTimestamp := maxTimestamp.Add(time.Millisecond)
 
@@ -122,6 +122,7 @@ func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, w
 
 		if endWindow.After(endTimeArg) {
 			endTime = endTimeArg
+			final = true
 		} else {
 			endTime = endWindow
 		}
@@ -131,5 +132,7 @@ func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, w
 		endTime = startTime.Add(window)
 	}
 
-	return NewTimeRangeQuery(startTime, endTime)
+	query = NewTimeRangeQuery(startTime, endTime)
+
+	return
 }

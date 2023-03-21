@@ -271,12 +271,18 @@ func main() {
 		sleep := time.Duration(cronSeconds/2) * time.Second
 
 		for {
-			query := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
+			startDatabaseEventSavers(dataSourceName)
+
+			query, final := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
 			log.Printf("repeating query for events in a %v window with %v", window, query)
 
-			startDatabaseEventSavers(dataSourceName)
 			nomore := queryTimeRange(endpoint, query, nil)
 			stopEventSavers()
+
+			if final {
+				log.Printf("quitting as query window end moved beyond the range specified by input %v", timeRangeQuery)
+				break
+			}
 
 			if nomore {
 				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
