@@ -69,7 +69,7 @@ func (t *TransferObjectEvent) GetTimestamp() time.Time {
 }
 
 func (t *TransferObjectEvent) InsertQuery() string {
-	return "insert into TransferObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, recipient, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :recipient, :objecttype, :objectid, :version)"
+	return "insert into TransferObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, recipient, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :recipient, :objecttype, :objectid, :version) on conflict on constraint TransferObjectEvent_pkey do nothing"
 }
 
 /*
@@ -110,7 +110,7 @@ func (t *PublishEvent) GetTimestamp() time.Time {
 }
 
 func (t *PublishEvent) InsertQuery() string {
-	return "insert into PublishEvent (txDigest, eventSeq, timestamp, sender, packageId, version, digest) values (:txdigest, :eventseq, :timestampdb, :sender, :packageid, :version, :digest)"
+	return "insert into PublishEvent (txDigest, eventSeq, timestamp, sender, packageId, version, digest) values (:txdigest, :eventseq, :timestampdb, :sender, :packageid, :version, :digest) on conflict on constraint PublishEvent_pkey do nothing"
 }
 
 /*
@@ -163,7 +163,7 @@ func (t *CoinBalanceChangeEvent) GetTimestamp() time.Time {
 }
 
 func (t *CoinBalanceChangeEvent) InsertQuery() string {
-	return "insert into CoinBalanceChangeEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, owner, changeType, coinType, coinObjectId, version, amount) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :owner, :changetype, :cointype, :coinobjectid, :version, :amount)"
+	return "insert into CoinBalanceChangeEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, owner, changeType, coinType, coinObjectId, version, amount) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :owner, :changetype, :cointype, :coinobjectid, :version, :amount) on conflict on constraint CoinBalanceChangeEvent_pkey do nothing"
 }
 
 /*
@@ -208,7 +208,7 @@ func (t *MoveEvent) GetTimestamp() time.Time {
 }
 
 func (t *MoveEvent) InsertQuery() string {
-	return "insert into MoveEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, type, fields, bcs) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :type, :fields, :bcs)"
+	return "insert into MoveEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, type, fields, bcs) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :type, :fields, :bcs) on conflict on constraint MoveEvent_pkey do nothing"
 }
 
 /*
@@ -253,7 +253,7 @@ func (t *MutateObjectEvent) GetTimestamp() time.Time {
 }
 
 func (t *MutateObjectEvent) InsertQuery() string {
-	return "insert into MutateObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :objecttype, :objectid, :version)"
+	return "insert into MutateObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :objecttype, :objectid, :version) on conflict on constraint MutateObjectEvent_pkey do nothing"
 }
 
 /*
@@ -296,7 +296,7 @@ func (t *DeleteObjectEvent) GetTimestamp() time.Time {
 }
 
 func (t *DeleteObjectEvent) InsertQuery() string {
-	return "insert into DeleteObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :objectid, :version)"
+	return "insert into DeleteObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :objectid, :version) on conflict on constraint DeleteObjectEvent_pkey do nothing"
 }
 
 /*
@@ -343,7 +343,7 @@ func (t *NewObjectEvent) GetTimestamp() time.Time {
 }
 
 func (t *NewObjectEvent) InsertQuery() string {
-	return "insert into NewObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, recipient, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :recipient, :objecttype, :objectid, :version)"
+	return "insert into NewObjectEvent (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, recipient, objectType, objectId, version) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :recipient, :objecttype, :objectid, :version) on conflict on constraint NewObjectEvent_pkey do nothing"
 }
 
 /*
