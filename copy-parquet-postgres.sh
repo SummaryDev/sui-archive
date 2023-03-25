@@ -18,7 +18,10 @@
 # "2023-03-07"
 d=$1
 
-for n in "transferObject" "publish" "coinBalanceChange" "moveEvent" "mutateObject" "deleteObject" "newObject"; do
+#
+#for n in "transferObject" "publish" "coinBalanceChange" "moveEvent" "mutateObject" "deleteObject" "newObject"; do
+#for n in "mutateObject" ; do
+for n in "deleteObject" "newObject"; do
   e="${n}Event"
   if [ $n = "moveEvent" ]
     then e=$n
@@ -27,6 +30,8 @@ for n in "transferObject" "publish" "coinBalanceChange" "moveEvent" "mutateObjec
   echo ${n} ${e};
 
   ./duckdb -c "copy (select * from read_parquet('${n}-${d}.parquet')) to '${n}-${d}.csv' with (header 1)"
+
+  source sui.env
 
   psql -c "create table sui_devnet.tmp_table as select * from sui_devnet.${e} with no data"
   psql -c "\copy sui_devnet.tmp_table from '${n}-${d}.csv' csv header"

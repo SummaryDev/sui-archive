@@ -18,7 +18,8 @@ type TimeRangeQuery struct {
 }
 
 func (t *TimeRangeQuery) String() string {
-	return fmt.Sprintf("StartTime %v %v EndTime %v %v", t.TimeRange.StartTime, time.UnixMilli(t.TimeRange.StartTime).UTC(), t.TimeRange.EndTime, time.UnixMilli(t.TimeRange.EndTime).UTC())
+	//return fmt.Sprintf("StartTime %v %v EndTime %v %v", t.TimeRange.StartTime, time.UnixMilli(t.TimeRange.StartTime).UTC(), t.TimeRange.EndTime, time.UnixMilli(t.TimeRange.EndTime).UTC())
+	return fmt.Sprintf("%v %v", time.UnixMilli(t.TimeRange.StartTime).UTC(), time.UnixMilli(t.TimeRange.EndTime).UTC())
 }
 
 func (t *TimeRangeQuery) Times() (startTimeArg time.Time, endTimeArg time.Time) {

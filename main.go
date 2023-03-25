@@ -148,14 +148,14 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 	if dateStr != "" {
 		startTime = parseTimeFromDateStr(dateStr)
 		endTime = startTime.AddDate(0, 0, 1)
-
+		timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
 		filenameSuffix = fmt.Sprintf("-%s", dateStr)
 	}
 
 	if startTimeStr != "" && endTimeStr != "" {
 		startTime = parseTimeFromTimeStr(startTimeStr)
 		endTime = parseTimeFromTimeStr(endTimeStr)
-
+		timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
 		filenameSuffix = fmt.Sprintf("-%s-%s", startTimeStr, endTimeStr)
 	}
 
@@ -170,8 +170,6 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 		log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z")
 	}
 
-	timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
-
 	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
 	cursorEventSeqStr := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"
 	if cursorTxDigest != "" && cursorEventSeqStr != "" {
@@ -183,7 +181,7 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 		startCursor = &EventID{TxDigest: cursorTxDigest, EventSeq: cursorEventSeq}
 	}
 
-	endpoint = os.Getenv("SUI_ARCHIVE_ENDPOINT") // "https://fullnode.devnet.sui.io"
+	endpoint = os.Getenv("SUI_ARCHIVE_ENDPOINT") // https://fullnode.devnet.sui.io https://explorer-rpc.devnet.sui.io
 	if endpoint == "" {
 		endpoint = "https://fullnode.devnet.sui.io"
 	}
@@ -225,13 +223,16 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 			switch e := err.(type) {
 			case *rpc.HTTPError:
 				if e.Code == 429 {
-					log.Printf("sleeping for 10s then retrying after Call failed with err=%v\n", err)
+					log.Printf("sleeping for 10s then retrying after Call failed with too many requests HTTPError=%v\n", err)
 					time.Sleep(time.Second * 10)
+				} else if e.Code == 503 || e.Code == 504 {
+					log.Printf("sleeping for 5s then retrying after Call failed with server overloaded HTTPError=%v\n", err)
+					time.Sleep(time.Second * 5)
 				} else {
-					log.Printf("retrying immediately after Call failed with err=%v\n", err)
+					log.Printf("retrying immediately after Call failed with HTTPError=%v\n", err)
 				}
 			default:
-				log.Fatalf("quitting after Call failed with unknown err=%v\n", err)
+				log.Printf("retrying immediately after Call failed with err=%v\n", err)
 			}
 
 		} else if response == nil {

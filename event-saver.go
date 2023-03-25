@@ -164,9 +164,9 @@ func (t *DatabaseEventSaver) Commit() {
 		if err != nil {
 			log.Fatal(err)
 		}
-	}
 
-	log.Printf("inserted %v %v with eventTimestamp %v", len(t.events), t.eventType.Name(), eventTimestamp.UTC())
+		log.Printf("inserted %v %v with eventTimestamp %v", len(t.events), t.eventType.Name(), eventTimestamp.UTC())
+	}
 
 	t.events = []Event{}
 }
