@@ -170,3 +170,12 @@ create index on NewObjectEvent (objectId);
 
 
 
+alter table NewObjectEvent alter column recipient type jsonb using to_jsonb(recipient);
+
+alter table TransferObjectEvent alter column recipient type jsonb using to_jsonb(recipient);
+alter table CoinBalanceChangeEvent alter column owner type jsonb using to_jsonb(owner);
+alter table MoveEvent alter column fields type jsonb using to_jsonb(fields);
+
+-- {"AddressOwner": "0xf5b13d1484470ac6bce405b56cae9da216b83e08"}
+-- select to_jsonb('{"AddressOwner": "0xf5b13d1484470ac6bce405b56cae9da216b83e08"}');
+-- select json_build_object('AddressOwner', '0xf5b13d1484470ac6bce405b56cae9da216b83e08');

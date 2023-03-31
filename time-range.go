@@ -49,7 +49,7 @@ func parseTimeFromTimeStr(s string) time.Time {
 }
 
 func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) time.Time {
-	subqueries := make([]string, len(eventNames))
+	subqueries := make([]string, len(EventNames))
 
 	var where string
 	var startTimeArg, endTimeArg time.Time
@@ -61,8 +61,8 @@ func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) ti
 	}
 
 	i := 0
-	for _, saver := range mapEventSaver {
-		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s %s", saver.EventType().Name(), where)
+	for _, eventName := range EventNames {
+		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s %s", eventName, where)
 		i++
 	}
 
@@ -98,7 +98,16 @@ func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) ti
 
 func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, window time.Duration) (query *TimeRangeQuery, final bool) {
 	maxTimestamp := queryMaxTimestamp(dataSourceName, timeRangeQuery)
-	nextTimestamp := maxTimestamp.Add(time.Millisecond)
+	// https://github.com/MystenLabs/sui/blob/f79ce4a54cd6a9270ddf538e719d4611571363d0/sdk/typescript/src/types/events.ts#L66
+	/*TimeRange: {
+		// left endpoint of time interval, milliseconds since epoch, inclusive
+	start_time: number;
+		// right endpoint of time interval, milliseconds since epoch, exclusive
+	end_time: number;
+	};*/
+
+	//nextTimestamp := maxTimestamp.Add(time.Millisecond)
+	nextTimestamp := maxTimestamp
 
 	var startTime, endTime, endWindow time.Time
 
@@ -114,7 +123,7 @@ func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, w
 			log.Printf("start time of the time range %v is before the latest timestamp %v in the database, will ignore the start time and query from the latest timestamp to the end of the time range\n", timeRangeQuery, nextTimestamp)
 			startTime = nextTimestamp
 		}
-		if endTimeArg.After(nextTimestamp) && startTimeArg.After(nextTimestamp) {
+		if endTimeArg.After(nextTimestamp) && (startTimeArg.After(nextTimestamp) || startTimeArg == nextTimestamp) {
 			log.Printf("both start and end times of the time range %v are after the latest timestamp %v in the database, will ignore the latest timestamp and query from start to end of the time range\n", timeRangeQuery, nextTimestamp)
 			startTime = startTimeArg
 		}

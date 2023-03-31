@@ -2,140 +2,36 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	//_ "github.com/lib/pq"
 	_ "github.com/jackc/pgx/stdlib"
 	rpc "github.com/ybbus/jsonrpc/v3"
 	"log"
 	"os"
-	"reflect"
 	"strconv"
 	"time"
 )
 
-func saveResponse(response *rpc.RPCResponse) *EventID {
+func saveResponse(response *rpc.RPCResponse, dataSourceName string) *EventID {
 	if response.Error != nil {
 		// rpc error handling goes here
 		// check response.Error.Code, response.Error.Message and optional response.Error.Data
 		log.Fatalf("rpc response error %v\n", response.Error)
 	}
 
-	var nextCursor *EventID
+	var eventResponseResult *EventResponseResult
 
-	// loop thru properties of response
-	iterResponse := reflect.ValueOf(response.Result).MapRange()
-	for iterResponse.Next() {
-		keyResponse := iterResponse.Key().String()
-		interfaceResponse := iterResponse.Value().Interface()
-
-		switch keyResponse {
-		case "data":
-			arrayData := iterResponse.Value().Interface().([]interface{})
-
-			// loop thru elements of data array
-			for _, datum := range arrayData {
-				var id EventID
-				var timestamp int64
-				var keyEvent string
-				var interfaceEvent interface{}
-
-				// loop thru properties of the array: id, timestamp, event
-				iterDatum := reflect.ValueOf(datum).MapRange()
-				for iterDatum.Next() {
-					keyDatum := iterDatum.Key().String()
-					interfaceDatum := iterDatum.Value().Interface()
-
-					switch keyDatum {
-					case "timestamp":
-						timestamp, _ = iterDatum.Value().Interface().(json.Number).Int64()
-					case "id":
-						id = *NewEventID(interfaceDatum)
-					case "event":
-						// the only child of the event property is a specific event: publish, newObject etc.
-						iterEvent := reflect.ValueOf(interfaceDatum).MapRange()
-						for iterEvent.Next() {
-							keyEvent = iterEvent.Key().String()
-							i := iterEvent.Value().Interface()
-							interfaceEvent = flatten(i.(map[string]interface{}))
-						}
-					}
-				}
-
-				saver := mapEventSaver[keyEvent]
-				if saver == nil {
-					//log.Printf("cannot handle event %v\n", keyEvent)
-				} else {
-					saver.Save(interfaceEvent, id, timestamp)
-				}
-			}
-		case "nextCursor":
-			nextCursor = NewEventID(interfaceResponse)
-			log.Printf("nextCursor %v\n", nextCursor)
-		}
+	err := response.GetObject(&eventResponseResult)
+	if err != nil {
+		log.Fatalf("cannot GetObject for EventResponseResult %v\n", err)
 	}
 
-	commitEventSavers()
+	eventResponseResult.Save(dataSourceName)
 
-	return nextCursor
+	return &eventResponseResult.NextCursor
 }
 
-// flatten takes a map and returns a new one where nested maps are replaced
-// by (maybe dot-delimited) keys.
-func flatten(m map[string]interface{}) map[string]interface{} {
-	o := make(map[string]interface{})
-	for k, v := range m {
-		switch child := v.(type) {
-		case map[string]interface{}:
-			nm := flatten(child)
-			for /*nk*/ _, nv := range nm {
-				nvs := fmt.Sprintf("%v", nv) //todo add child field name to the new key? like fields="validator_address 0x7b53b1ecab7da81205a27bf7fe1edae43a049dcd" or owner="AddressOwner 0x510b4f30c71f0d28061dc04937b8b8ef128c0571"
-				//log.Printf("%v %v %v %v", k, nk, nv, nvs)
-				//o[k+nk] = nvs
-				//o[k+"."+nk] = nv
-				//for _, nv := range nm {
-				o[k] = nvs
-			}
-		default:
-			o[k] = v
-		}
-	}
-	return o
-}
-
-var eventNames = []string{"publish", "transferObject", "coinBalanceChange", "moveEvent", "mutateObject", "deleteObject", "newObject"}
-
-var mapEventSaver = map[string]EventSaver{}
-
-func startFileEventSavers(filenameSuffix string, folder string) {
-	for _, name := range eventNames {
-		saver := NewFileEventSaver(name, filenameSuffix, folder)
-		saver.Start()
-		mapEventSaver[name] = saver
-	}
-}
-
-func startDatabaseEventSavers(dataSourceName string) {
-	for _, name := range eventNames {
-		saver := NewDatabaseEventSaver(name, dataSourceName)
-		saver.Start()
-		mapEventSaver[name] = saver
-	}
-}
-
-func commitEventSavers() {
-	for _, saver := range mapEventSaver {
-		saver.Commit()
-	}
-}
-
-func stopEventSavers() {
-	for _, saver := range mapEventSaver {
-		saver.Stop()
-	}
-}
-
-func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix string, startCursor *EventID, cronSeconds int, dataSourceName string, folder string) {
+func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *EventID, cronSeconds int, dataSourceName string, eventTypeQuery *EventTypeQuery) {
 	var err error
 
 	var startTime, endTime time.Time
@@ -149,14 +45,12 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 		startTime = parseTimeFromDateStr(dateStr)
 		endTime = startTime.AddDate(0, 0, 1)
 		timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
-		filenameSuffix = fmt.Sprintf("-%s", dateStr)
 	}
 
 	if startTimeStr != "" && endTimeStr != "" {
 		startTime = parseTimeFromTimeStr(startTimeStr)
 		endTime = parseTimeFromTimeStr(endTimeStr)
 		timeRangeQuery = NewTimeRangeQuery(startTime, endTime)
-		filenameSuffix = fmt.Sprintf("-%s-%s", startTimeStr, endTimeStr)
 	}
 
 	if cronStr != "" {
@@ -166,8 +60,13 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 		}
 	}
 
-	if cronStr == "" && (startTimeStr == "" && endTimeStr == "") && dateStr == "" {
-		log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z")
+	eventType := os.Getenv("SUI_ARCHIVE_EVENT_TYPE")
+	if eventType != "" {
+		eventTypeQuery = NewEventTypeQuery(eventType)
+	}
+
+	if cronStr == "" && (startTimeStr == "" && endTimeStr == "") && dateStr == "" && eventType == "" {
+		log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z or specific event to query like SUI_ARCHIVE_EVENT_TYPE=MoveEvent")
 	}
 
 	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
@@ -193,29 +92,22 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, filenameSuffix 
 
 	dataSourceName = fmt.Sprintf("host=%v dbname=%v user=%v password=%v search_path=%v", os.Getenv("PGHOST"), os.Getenv("PGDATABASE"), os.Getenv("PGUSER"), os.Getenv("PGPASSWORD"), schema)
 
-	folder = os.Getenv("SUI_ARCHIVE_FOLDER") // "./sui-archive-data"
-	if folder == "" {
-		folder = "."
-	}
-
-	return endpoint, timeRangeQuery, filenameSuffix, startCursor, cronSeconds, dataSourceName, folder
+	return
 }
 
-func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *EventID) (nomore bool) {
-	method := "sui_getEvents"
+func query(endpoint string, dataSourceName string, query interface{}, startCursor *EventID) (nomore bool) {
+	method := "suix_queryEvents"
 
-	log.Printf("query %v with %v TimeRangeQuery %v %v\n", endpoint, method, timeRangeQuery, startCursor)
+	log.Printf("query %v with %v %v %v\n", endpoint, method, query, startCursor)
 
 	client := rpc.NewClient(endpoint)
-
-	log.Printf("startCursor is %v\n", startCursor)
 
 	var failed, done bool
 
 	nextCursor := startCursor
 
 	for failed || !done {
-		response, err := client.Call(context.Background(), method, timeRangeQuery, nextCursor)
+		response, err := client.Call(context.Background(), method, query, nextCursor)
 
 		if err != nil {
 			failed = true
@@ -255,7 +147,7 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 		} else {
 			failed = false
 
-			nextCursor = saveResponse(response)
+			nextCursor = saveResponse(response, dataSourceName)
 
 			if *nextCursor == (EventID{}) {
 				done = true
@@ -268,23 +160,20 @@ func queryTimeRange(endpoint string, timeRangeQuery *TimeRangeQuery, startCursor
 }
 
 func main() {
-	endpoint, timeRangeQuery, filenameSuffix, startCursor, cronSeconds, dataSourceName, folder := getArgs()
+	endpoint, timeRangeQuery, startCursor, cronSeconds, dataSourceName, eventTypeQuery := getArgs()
 
 	if cronSeconds > 0 {
 		window := time.Duration(cronSeconds) * time.Second //10
 		sleep := time.Duration(cronSeconds/2) * time.Second
 
 		for {
-			startDatabaseEventSavers(dataSourceName)
+			unsavedEventsQuery, final := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
+			log.Printf("repeating unsavedEventsQuery for events in a %v window with %v", window, unsavedEventsQuery)
 
-			query, final := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
-			log.Printf("repeating query for events in a %v window with %v", window, query)
-
-			nomore := queryTimeRange(endpoint, query, nil)
-			stopEventSavers()
+			nomore := query(endpoint, dataSourceName, unsavedEventsQuery, nil)
 
 			if final {
-				log.Printf("quitting as query window end moved beyond the range specified by input %v", timeRangeQuery)
+				log.Printf("quitting as unsavedEventsQuery window end moved beyond the range specified by input %v", timeRangeQuery)
 				break
 			}
 
@@ -294,9 +183,7 @@ func main() {
 			}
 		} // todo replace infinite loop with another mechanism perhaps reacting to program termination signals
 
-	} else {
-		startFileEventSavers(filenameSuffix, folder)
-		queryTimeRange(endpoint, timeRangeQuery, startCursor)
-		stopEventSavers()
+	} else if eventTypeQuery != nil {
+		query(endpoint, dataSourceName, eventTypeQuery, startCursor)
 	}
 }
