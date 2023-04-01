@@ -56,6 +56,8 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *Ev
 		if err != nil {
 			log.Fatalf("cronStr %v\n", err)
 		}
+	} else {
+		cronSeconds = 60 * 60 * 24 // 86400
 	}
 
 	eventType := os.Getenv("SUI_ARCHIVE_EVENT_TYPE")
@@ -63,9 +65,9 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *Ev
 		eventTypeQuery = NewEventTypeQuery(eventType)
 	}
 
-	if cronStr == "" && (startTimeStr == "" && endTimeStr == "") && dateStr == "" && eventType == "" {
-		log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z or specific event to query like SUI_ARCHIVE_EVENT_TYPE=MoveEvent")
-	}
+	//if cronStr == "" && (startTimeStr == "" && endTimeStr == "") && dateStr == "" && eventType == "" {
+	//	log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z or specific event to query like SUI_ARCHIVE_EVENT_TYPE=MoveEvent")
+	//}
 
 	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
 	cursorEventSeqStr := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"

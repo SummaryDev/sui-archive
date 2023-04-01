@@ -16,6 +16,8 @@ RUN go build -o /go/bin/sui-archive
 # STEP 2 build a small image
 ############################
 FROM scratch
+# copy the ca-certificate.crt from the build stage
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # Copy our static executable.
 COPY --from=builder /go/bin/sui-archive /go/bin/sui-archive
 # Run the hello binary.
