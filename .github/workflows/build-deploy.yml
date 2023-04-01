@@ -48,7 +48,6 @@ jobs:
         image_sui_archive: ${{ steps.build.outputs.image }}
         db_host: ${{ secrets.db_host }}
         db_password_sui_archive: ${{ secrets.db_password }}
-        sui_network: devnet
       with:
         eks_cluster: summary
         command: ./deploy.sh
