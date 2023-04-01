@@ -170,12 +170,58 @@ create index on NewObjectEvent (objectId);
 
 
 
-alter table NewObjectEvent alter column recipient type jsonb using to_jsonb(recipient);
+alter table NewObjectEvent
+    alter column recipient type jsonb using to_jsonb(recipient);
 
-alter table TransferObjectEvent alter column recipient type jsonb using to_jsonb(recipient);
-alter table CoinBalanceChangeEvent alter column owner type jsonb using to_jsonb(owner);
-alter table MoveEvent alter column fields type jsonb using to_jsonb(fields);
+alter table TransferObjectEvent
+    alter column recipient type jsonb using to_jsonb(recipient);
+alter table CoinBalanceChangeEvent
+    alter column owner type jsonb using to_jsonb(owner);
+alter table MoveEvent
+    alter column fields type jsonb using to_jsonb(fields);
 
 -- {"AddressOwner": "0xf5b13d1484470ac6bce405b56cae9da216b83e08"}
 -- select to_jsonb('{"AddressOwner": "0xf5b13d1484470ac6bce405b56cae9da216b83e08"}');
 -- select json_build_object('AddressOwner', '0xf5b13d1484470ac6bce405b56cae9da216b83e08');
+
+
+drop table if exists Event cascade;
+create table Event
+(
+    txDigest          text,
+    eventSeq          int,
+    timestamp         timestamp,
+    packageId         text,
+    transactionModule text,
+    sender            text,
+    type              text,
+    parsedJson        jsonb,
+    bcs               text,
+    primary key (txDigest, eventSeq)
+);
+create index on Event (txDigest);
+create index on Event (timestamp);
+create index on Event (packageId);
+create index on Event (transactionModule);
+create index on Event (sender);
+create index on Event (type);
+
+comment on table Event is 'SuiEvent';
+
+comment on column Event.txDigest is 'Transaction digest';
+comment on column Event.eventSeq is 'Event sequence';
+comment on column Event.timestamp is 'Event time';
+comment on column Event.packageId is 'Move package where this event was emitted';
+comment on column Event.transactionModule is 'Move module where this event was emitted';
+comment on column Event.sender is 'Sender Sui address';
+comment on column Event.type is 'Move event type';
+comment on column Event.parsedJson is 'Parsed json value of the event';
+comment on column Event.bcs is 'Base 58 encoded bcs bytes of the move event';
+
+comment on table TransferObjectEvent is E'@omit';
+comment on table DeleteObjectEvent is E'@omit';
+comment on table NewObjectEvent is E'@omit';
+comment on table CoinBalanceChangeEvent is E'@omit';
+comment on table MoveEvent is E'@omit';
+comment on table MutateObjectEvent is E'@omit';
+comment on table PublishEvent is E'@omit';

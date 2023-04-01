@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/jmoiron/sqlx"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -49,8 +48,6 @@ func parseTimeFromTimeStr(s string) time.Time {
 }
 
 func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) time.Time {
-	subqueries := make([]string, len(EventNames))
-
 	var where string
 	var startTimeArg, endTimeArg time.Time
 
@@ -60,13 +57,7 @@ func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) ti
 		//where = fmt.Sprintf("where timestamp > '%v'", startTimeArg.Format(time.RFC3339))
 	}
 
-	i := 0
-	for _, eventName := range EventNames {
-		subqueries[i] = fmt.Sprintf("select max(timestamp) m from %s %s", eventName, where)
-		i++
-	}
-
-	query := fmt.Sprintf("select max(m) from (%s) sub", strings.Join(subqueries, " union all "))
+	query := fmt.Sprintf("select max(timestamp) from Event %v", where)
 
 	db, err := sqlx.Open( /*"postgres"*/ "pgx", dataSourceName)
 	if err != nil {
@@ -106,8 +97,8 @@ func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, w
 	end_time: number;
 	};*/
 
-	//nextTimestamp := maxTimestamp.Add(time.Millisecond)
-	nextTimestamp := maxTimestamp
+	nextTimestamp := maxTimestamp.Add(time.Millisecond)
+	//nextTimestamp := maxTimestamp
 
 	var startTime, endTime, endWindow time.Time
 

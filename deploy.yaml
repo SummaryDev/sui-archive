@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sui-archive-${sui_network}
+spec:
+  selector:
+    matchLabels:
+      app: sui-archive-${sui_network}
+  template:
+    metadata:
+      labels:
+        app: sui-archive-${sui_network}
+    spec:
+      containers:
+      - name: sui-archive
+        image: "${image_sui_archive}"
+        env:
+        - name: PGPASSWORD
+          value: "${db_password_sui_archive}"
+        - name: PGHOST
+          value: "${db_host}"
+        - name: PGDATABASE
+          value: "${namespace}"
+        - name: SUI_ARCHIVE_SCHEMA
+          value: "sui_${sui_network}"
+        - name: PGUSER
+          value: "sui"
+        - name: SUI_ARCHIVE_CRON_SECONDS
+          value: 86400
+        - name: SUI_ARCHIVE_ENDPOINT
+          value: "https://fullnode.${sui_network}.sui.io"
+#        resources:
+#          limits:
+#            memory: "1024Mi"
+##            cpu: "1000m"
+#          requests:
+#            memory: "200Mi"
+##            cpu: "100m"
+

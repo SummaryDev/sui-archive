@@ -12,23 +12,21 @@ import (
 	"time"
 )
 
-func saveResponse(response *rpc.RPCResponse, dataSourceName string) *EventID {
+func saveResponse(response *rpc.RPCResponse, dataSourceName string) (eventResponseResult *EventResponseResult, countSaved int64) {
 	if response.Error != nil {
 		// rpc error handling goes here
 		// check response.Error.Code, response.Error.Message and optional response.Error.Data
 		log.Fatalf("rpc response error %v\n", response.Error)
 	}
 
-	var eventResponseResult *EventResponseResult
-
 	err := response.GetObject(&eventResponseResult)
 	if err != nil {
 		log.Fatalf("cannot GetObject for EventResponseResult %v\n", err)
 	}
 
-	eventResponseResult.Save(dataSourceName)
+	countSaved = eventResponseResult.Save(dataSourceName)
 
-	return &eventResponseResult.NextCursor
+	return
 }
 
 func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *EventID, cronSeconds int, dataSourceName string, eventTypeQuery *EventTypeQuery) {
@@ -147,11 +145,26 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 		} else {
 			failed = false
 
-			nextCursor = saveResponse(response, dataSourceName)
+			eventResponseResult, countSaved := saveResponse(response, dataSourceName)
+
+			nextCursor = &eventResponseResult.NextCursor
+
+			hasNextPage := eventResponseResult.HasNextPage
 
 			if *nextCursor == (EventID{}) {
 				done = true
-				log.Printf("done as received cursor %v\n", nextCursor)
+				nomore = true
+				log.Println("done as received empty cursor")
+			}
+
+			if !hasNextPage {
+				done = true
+				log.Println("done as received false hasNextPage")
+			}
+
+			if countSaved == 0 {
+				done = true
+				log.Println("done as saved no events")
 			}
 		}
 	}
@@ -163,8 +176,8 @@ func main() {
 	endpoint, timeRangeQuery, startCursor, cronSeconds, dataSourceName, eventTypeQuery := getArgs()
 
 	if cronSeconds > 0 {
-		window := time.Duration(cronSeconds) * time.Second //10
-		sleep := time.Duration(cronSeconds/2) * time.Second
+		window := time.Duration(cronSeconds) * time.Second
+		sleep := time.Duration(10) * time.Second
 
 		for {
 			unsavedEventsQuery, final := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
