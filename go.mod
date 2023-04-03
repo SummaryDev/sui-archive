@@ -3,11 +3,8 @@ module summary/sui-archive
 go 1.19
 
 require (
-	github.com/go-co-op/gocron v1.18.1
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jmoiron/sqlx v1.3.5
-	github.com/xitongsys/parquet-go v1.6.2
-	github.com/xitongsys/parquet-go-source v0.0.0-20221025031416-9877e685ef65
 	github.com/ybbus/jsonrpc/v3 v3.1.4
 )
 

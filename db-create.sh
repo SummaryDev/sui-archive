@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source ./env.sh
+source ../infra/env.sh
 
 env | grep '^db' | sort
 
@@ -18,7 +18,7 @@ envsubst < db-create.sql | psql --file -
 # Create tables
 
 export PGUSER=sui && \
-export PGPASSWORD=${db_password_sui} && \
+export PGPASSWORD=${db_password_sui_archive} && \
 export PGDATABASE=${namespace}
 
 env | grep '^PG' | sort

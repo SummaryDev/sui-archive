@@ -12,23 +12,6 @@ import (
 	"time"
 )
 
-func saveResponse(response *rpc.RPCResponse, dataSourceName string) (eventResponseResult *EventResponseResult, countSaved int64) {
-	if response.Error != nil {
-		// rpc error handling goes here
-		// check response.Error.Code, response.Error.Message and optional response.Error.Data
-		log.Fatalf("rpc response error %v\n", response.Error)
-	}
-
-	err := response.GetObject(&eventResponseResult)
-	if err != nil {
-		log.Fatalf("cannot GetObject for EventResponseResult %v\n", err)
-	}
-
-	countSaved = eventResponseResult.Save(dataSourceName)
-
-	return
-}
-
 func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *EventID, cronSeconds int, dataSourceName string, eventTypeQuery *EventTypeQuery) {
 	var err error
 
@@ -147,7 +130,14 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 		} else {
 			failed = false
 
-			eventResponseResult, countSaved := saveResponse(response, dataSourceName)
+			var eventResponseResult *EventResponseResult
+
+			err := response.GetObject(&eventResponseResult)
+			if err != nil {
+				log.Fatalf("cannot GetObject for EventResponseResult %v\n", err)
+			}
+
+			countSaved := eventResponseResult.Save(dataSourceName)
 
 			nextCursor = &eventResponseResult.NextCursor
 
@@ -155,7 +145,7 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 
 			if *nextCursor == (EventID{}) {
 				done = true
-				nomore = true
+				nomore = true // todo find better indication there are no more results
 				log.Println("done as received empty cursor")
 			}
 
