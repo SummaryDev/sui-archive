@@ -1,3 +1,5 @@
+docs/*.pdf
+roadmap.md
 *.env
 env.sh
 data

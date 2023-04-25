@@ -1,8 +1,8 @@
 -- db-default-privileges
-alter default privileges for role sui in schema sui_devnet grant select on tables to hasura;
-alter default privileges for role sui in schema sui_devnet grant select on tables to superset;
-alter default privileges for role sui in schema sui_devnet grant select on tables to metabase;
-alter default privileges for role sui in schema sui_devnet grant select on tables to redash;
+alter default privileges for role sui_archive in schema sui_devnet grant select on tables to hasura;
+alter default privileges for role sui_archive in schema sui_devnet grant select on tables to superset;
+alter default privileges for role sui_archive in schema sui_devnet grant select on tables to metabase;
+alter default privileges for role sui_archive in schema sui_devnet grant select on tables to redash;
 
 set search_path to sui_devnet;
 

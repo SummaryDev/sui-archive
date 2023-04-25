@@ -24,7 +24,7 @@ spec:
         - name: SUI_ARCHIVE_SCHEMA
           value: "sui_${sui_network}"
         - name: PGUSER
-          value: "sui"
+          value: "sui_archive"
         - name: SUI_ARCHIVE_CRON_SECONDS
           value: "86400"
         - name: SUI_ARCHIVE_ENDPOINT
