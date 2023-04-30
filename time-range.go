@@ -5,11 +5,12 @@ import (
 	"github.com/jmoiron/sqlx"
 	"log"
 	"time"
+	"strconv"
 )
 
 type TimeRange struct {
-	StartTime int64 `json:"startTime"`
-	EndTime   int64 `json:"endTime"`
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
 }
 
 type TimeRangeQuery struct {
@@ -18,17 +19,21 @@ type TimeRangeQuery struct {
 
 func (t *TimeRangeQuery) String() string {
 	//return fmt.Sprintf("StartTime %v %v EndTime %v %v", t.TimeRange.StartTime, time.UnixMilli(t.TimeRange.StartTime).UTC(), t.TimeRange.EndTime, time.UnixMilli(t.TimeRange.EndTime).UTC())
-	return fmt.Sprintf("%v %v", time.UnixMilli(t.TimeRange.StartTime).UTC(), time.UnixMilli(t.TimeRange.EndTime).UTC())
+	startTime, _ := strconv.ParseInt(t.TimeRange.StartTime, 10, 64)
+	endTime, _ := strconv.ParseInt(t.TimeRange.EndTime, 10, 64)
+	return fmt.Sprintf("%v %v", time.UnixMilli(startTime).UTC(), time.UnixMilli(endTime).UTC())
 }
 
 func (t *TimeRangeQuery) Times() (startTimeArg time.Time, endTimeArg time.Time) {
-	startTimeArg = time.UnixMilli(t.TimeRange.StartTime).In(time.UTC)
-	endTimeArg = time.UnixMilli(t.TimeRange.EndTime).In(time.UTC)
+	startTime, _ := strconv.ParseInt(t.TimeRange.StartTime, 10, 64)
+	endTime, _ := strconv.ParseInt(t.TimeRange.EndTime, 10, 64)
+	startTimeArg = time.UnixMilli(startTime).In(time.UTC)
+	endTimeArg = time.UnixMilli(endTime).In(time.UTC)
 	return startTimeArg, endTimeArg
 }
 
 func NewTimeRangeQuery(startTime time.Time, endTime time.Time) *TimeRangeQuery {
-	return &TimeRangeQuery{TimeRange: TimeRange{StartTime: startTime.UnixMilli(), EndTime: endTime.UnixMilli()}}
+	return &TimeRangeQuery{TimeRange: TimeRange{StartTime: strconv.FormatInt(startTime.UnixMilli(), 10), EndTime: strconv.FormatInt(endTime.UnixMilli(), 10)}}
 }
 
 func parseTimeFromDateStr(s string) time.Time {
