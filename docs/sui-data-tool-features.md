@@ -51,14 +51,13 @@ iXokC38mDQD0nMiID1ZBIBenvVFVcPc3Bt9X0nYz
 
 ## Query results from the API
 
-Response comes in json or csv which you can parse to automate your data
-pipeline.
+Response comes in json or csv which you can parse to automate your data pipeline.
 
 ![bg fit right](images/redash-api-response-json.png)
 
 ## Charts
 
-Build charts from the results of you query.
+Build charts from the results of your query.
 
 ![bg fit right](images/redash-pie-chart.png)
 
@@ -75,6 +74,10 @@ Try it out https://redash.prod.summary.dev/public/dashboards/2D97eoBvXCnlmsZHCh9
 Query blockchain data with GraphQL from a web interface.
 
 Compare to SQL this interface is better suited for data exploration and automation.
+
+Try it out
+ 
+https://summary.dev/sui-devnet.html
 
 ![bg fit right](images/graphql-request.png)
 
