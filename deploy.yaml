@@ -27,6 +27,8 @@ spec:
           value: "sui_archive"
         - name: SUI_ARCHIVE_CRON_SECONDS
           value: "86400"
+        - name: SUI_ARCHIVE_START_TIME
+          value: "2023-04-14T00:00:00Z"
         - name: SUI_ARCHIVE_ENDPOINT
           value: "https://fullnode.${sui_network}.sui.io"
 #        resources:
