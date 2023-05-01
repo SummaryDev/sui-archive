@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# sui_network=devnet ./db-create.sh
+# sui_network=testnet ./db-create.sh
+
 source ../infra/env.sh
 
 env | grep '^db' | sort

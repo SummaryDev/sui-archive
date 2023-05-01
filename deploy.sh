@@ -38,3 +38,5 @@ function fun {
 }
 
 fun devnet
+
+fun testnet
