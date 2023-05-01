@@ -2,7 +2,7 @@
 alter default privileges for role sui_archive in schema sui_${sui_network} grant select on tables to hasura;
 alter default privileges for role sui_archive in schema sui_${sui_network} grant select on tables to superset;
 alter default privileges for role sui_archive in schema sui_${sui_network} grant select on tables to metabase;
-alter default privileges for role sui_archive in schema sui_${sui_network} grant select on tables to redash;
+alter default privileges for role sui_archive in schema sui_${sui_network} grant select on tables to redash_sui;
 
 set search_path to sui_${sui_network};
 
