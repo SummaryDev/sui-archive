@@ -85,7 +85,7 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 	for failed || !done {
 		log.Printf("query %v with %v %v %v\n", endpoint, method, query, nextCursor)
 
-		response, err := client.Call(context.Background(), method, query, nextCursor)
+		response, err := client.Call(context.Background(), method, query, nextCursor, 100)
 
 		//log.Printf("response %v", response)
 

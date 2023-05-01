@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 	"strconv"
+	"strings"
 )
 
 type EventRpc struct {
@@ -37,7 +38,6 @@ func NewEventDb(r EventRpc) (d EventDb) {
 	d.TransactionModule = r.TransactionModule
 	d.Sender = r.Sender
 	d.EventType = r.EventType
-	d.ParsedJson = r.ParsedJson
 	d.Bcs = r.Bcs
 	d.TimestampMs = r.TimestampMs
 
@@ -52,6 +52,25 @@ func NewEventDb(r EventRpc) (d EventDb) {
 	}
 
 	d.TimestampDb = time.UnixMilli(timestampMs).In(loc)
+
+	bytes, err := json.Marshal(r.ParsedJson)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s := string(bytes)
+
+	//log.Printf("s %v", s)
+
+	replaced := strings.Replace(s, `\u0000`, "", -1)
+
+	//log.Printf("replaced %v", replaced)
+
+	rawMessage := json.RawMessage(replaced)
+
+	//log.Printf("rawMessage %v", rawMessage)
+
+	d.ParsedJson = rawMessage
 
 	return
 }
@@ -100,7 +119,7 @@ func queryMaxEventID(dataSourceName string) (maxEventID *EventID) {
 			log.Fatal(err)
 		}
 
-		log.Printf("eventID %v", eventID)
+		log.Printf("queryMaxEventID %v", eventID)
 
 		maxEventID = &eventID
 	}
