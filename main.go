@@ -52,14 +52,9 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *Ev
 	//	log.Fatalln("specify with env variables either the date like SUI_ARCHIVE_DATE=2023-03-07 or both start and end times like SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z SUI_ARCHIVE_END_TIME=2023-03-07T10:00:00Z or cron frequency in seconds and start time like SUI_ARCHIVE_CRON_SECONDS=60 SUI_ARCHIVE_START_TIME=2023-03-07T00:00:00Z or specific event to query like SUI_ARCHIVE_EVENT_TYPE=MoveEvent")
 	//}
 
-	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST")    //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
-	cursorEventSeqStr := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"
-	if cursorTxDigest != "" && cursorEventSeqStr != "" {
-		cursorEventSeq, err := strconv.Atoi(cursorEventSeqStr)
-		if err != nil {
-			log.Fatalf("cannot parse SUI_ARCHIVE_CURSOR_EVENTSEQ %v\n", err)
-		}
-
+	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST") //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
+	cursorEventSeq := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"
+	if cursorTxDigest != "" && cursorEventSeq != "" {
 		startCursor = &EventID{TxDigest: cursorTxDigest, EventSeq: cursorEventSeq}
 	}
 
@@ -81,8 +76,6 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *Ev
 func query(endpoint string, dataSourceName string, query interface{}, startCursor *EventID) (nomore bool) {
 	method := "suix_queryEvents"
 
-	log.Printf("query %v with %v %v %v\n", endpoint, method, query, startCursor)
-
 	client := rpc.NewClient(endpoint)
 
 	var failed, done bool
@@ -90,7 +83,11 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 	nextCursor := startCursor
 
 	for failed || !done {
+		log.Printf("query %v with %v %v %v\n", endpoint, method, query, nextCursor)
+
 		response, err := client.Call(context.Background(), method, query, nextCursor)
+
+		//log.Printf("response %v", response)
 
 		if err != nil {
 			failed = true
@@ -112,7 +109,7 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 
 		} else if response == nil {
 			failed = true
-			log.Printf("retrying after Call failed with response=%v\n", response)
+			log.Printf("retrying immediately after Call failed with response=%v\n", response)
 		} else if response.Error != nil {
 			if response.Error.Code == -32602 {
 				done = true
@@ -124,7 +121,7 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 				//	log.Printf("done as received an error we cannot recover from: %v\n", response.Error)
 			} else {
 				failed = true
-				log.Printf("retrying after Call failed with %v\n", response.Error)
+				log.Printf("retrying immediately after Call failed with %v\n", response.Error)
 			}
 
 		} else {
@@ -167,18 +164,19 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 func main() {
 	endpoint, timeRangeQuery, startCursor, cronSeconds, dataSourceName, eventTypeQuery := getArgs()
 
-	if cronSeconds > 0 {
+	sleep := time.Duration(10) * time.Second
+	var q interface{}
+
+	if timeRangeQuery != nil {
 		window := time.Duration(cronSeconds) * time.Second
-		sleep := time.Duration(10) * time.Second
+		q, final := unsavedEventsTimeRangeQuery(dataSourceName, timeRangeQuery, window)
+		log.Printf("repeating query for events in a %v window with %v", window, q)
 
 		for {
-			unsavedEventsQuery, final := unsavedEventsQuery(dataSourceName, timeRangeQuery, window)
-			log.Printf("repeating unsavedEventsQuery for events in a %v window with %v", window, unsavedEventsQuery)
-
-			nomore := query(endpoint, dataSourceName, unsavedEventsQuery, nil)
+			nomore := query(endpoint, dataSourceName, q, nil)
 
 			if final {
-				log.Printf("quitting as unsavedEventsQuery window end moved beyond the range specified by input %v", timeRangeQuery)
+				log.Printf("quitting as query window end moved beyond the range specified by input %v", timeRangeQuery)
 				break
 			}
 
@@ -186,9 +184,22 @@ func main() {
 				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
 				time.Sleep(sleep)
 			}
-		} // todo replace infinite loop with another mechanism perhaps reacting to program termination signals
-
+		}
 	} else if eventTypeQuery != nil {
 		query(endpoint, dataSourceName, eventTypeQuery, startCursor)
+	} else {
+		maxEventID := queryMaxEventID(dataSourceName)
+
+		q = NewAllQuery()
+		log.Printf("repeating query for all events with cursor %v", maxEventID)
+
+		for {
+			nomore := query(endpoint, dataSourceName, q, maxEventID)
+
+			if nomore {
+				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
+				time.Sleep(sleep)
+			}
+		}
 	}
 }

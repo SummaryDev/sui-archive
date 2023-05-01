@@ -19,9 +19,10 @@ type TimeRangeQuery struct {
 
 func (t *TimeRangeQuery) String() string {
 	//return fmt.Sprintf("StartTime %v %v EndTime %v %v", t.TimeRange.StartTime, time.UnixMilli(t.TimeRange.StartTime).UTC(), t.TimeRange.EndTime, time.UnixMilli(t.TimeRange.EndTime).UTC())
-	startTime, _ := strconv.ParseInt(t.TimeRange.StartTime, 10, 64)
-	endTime, _ := strconv.ParseInt(t.TimeRange.EndTime, 10, 64)
-	return fmt.Sprintf("%v %v", time.UnixMilli(startTime).UTC(), time.UnixMilli(endTime).UTC())
+	//startTime, _ := strconv.ParseInt(t.TimeRange.StartTime, 10, 64)
+	//endTime, _ := strconv.ParseInt(t.TimeRange.EndTime, 10, 64)
+	//return fmt.Sprintf("%v %v", time.UnixMilli(startTime).UTC(), time.UnixMilli(endTime).UTC())
+	return fmt.Sprintf("StartTime %v EndTime %v", t.TimeRange.StartTime, t.TimeRange.EndTime)
 }
 
 func (t *TimeRangeQuery) Times() (startTimeArg time.Time, endTimeArg time.Time) {
@@ -92,7 +93,7 @@ func queryMaxTimestamp(dataSourceName string, timeRangeQuery *TimeRangeQuery) ti
 	return maxTimestamp
 }
 
-func unsavedEventsQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, window time.Duration) (query *TimeRangeQuery, final bool) {
+func unsavedEventsTimeRangeQuery(dataSourceName string, timeRangeQuery *TimeRangeQuery, window time.Duration) (query *TimeRangeQuery, final bool) {
 	maxTimestamp := queryMaxTimestamp(dataSourceName, timeRangeQuery)
 	// https://github.com/MystenLabs/sui/blob/f79ce4a54cd6a9270ddf538e719d4611571363d0/sdk/typescript/src/types/events.ts#L66
 	/*TimeRange: {

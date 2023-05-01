@@ -5,6 +5,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"log"
 	"time"
+	"strconv"
 )
 
 type EventRpc struct {
@@ -25,7 +26,7 @@ type Event struct {
 	EventType         string          `json:"type"`                 // Move event type.
 	ParsedJson        json.RawMessage `json:"parsedJson,omitempty"` // Parsed json value of the event
 	Bcs               string          `json:"bcs,omitempty"`        // Base 58 encoded bcs bytes of the move event
-	TimestampMs       int64           `json:"timestampMs,omitempty"`
+	TimestampMs       string          `json:"timestampMs,omitempty"`
 }
 
 func NewEventDb(r EventRpc) (d EventDb) {
@@ -44,14 +45,20 @@ func NewEventDb(r EventRpc) (d EventDb) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	d.TimestampDb = time.UnixMilli(r.TimestampMs).In(loc)
+
+	timestampMs, err := strconv.ParseInt(r.TimestampMs, 10, 64)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	d.TimestampDb = time.UnixMilli(timestampMs).In(loc)
 
 	return
 }
 
 type EventID struct {
 	TxDigest string `json:"txDigest"`
-	EventSeq int    `json:"eventSeq"`
+	EventSeq string `json:"eventSeq"`
 }
 
 type EventTypeQuery struct {
@@ -60,6 +67,50 @@ type EventTypeQuery struct {
 
 func NewEventTypeQuery(s string) *EventTypeQuery {
 	return &EventTypeQuery{EventType: s}
+}
+
+type AllQuery struct {
+	All []string `json:"All"`
+}
+
+func NewAllQuery() *AllQuery {
+	q := &AllQuery{}
+	q.All = make([]string, 0)
+	return q
+}
+
+func queryMaxEventID(dataSourceName string) (maxEventID *EventID) {
+	query := "select txDigest, eventSeq from event order by timestamp desc limit 1"
+
+	db, err := sqlx.Open( /*"postgres"*/ "pgx", dataSourceName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	eventID := EventID{}
+
+	rows, err := db.Queryx(query)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if rows.Next() {
+		err = rows.StructScan(&eventID)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("eventID %v", eventID)
+
+		maxEventID = &eventID
+	}
+
+	err = db.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return
 }
 
 type EventResponseResult struct {
