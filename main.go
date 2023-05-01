@@ -148,6 +148,7 @@ func query(endpoint string, dataSourceName string, query interface{}, startCurso
 
 			if !hasNextPage {
 				done = true
+				nomore = true
 				log.Println("done as received false hasNextPage")
 			}
 
@@ -191,14 +192,17 @@ func main() {
 		maxEventID := queryMaxEventID(dataSourceName)
 
 		q = NewAllQuery()
-		log.Printf("repeating query for all events with cursor %v", maxEventID)
 
 		for {
+			log.Printf("repating query for all events with cursor %v", maxEventID)
+
 			nomore := query(endpoint, dataSourceName, q, maxEventID)
 
 			if nomore {
 				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
 				time.Sleep(sleep)
+
+				maxEventID = queryMaxEventID(dataSourceName)
 			}
 		}
 	}
