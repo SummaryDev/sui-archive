@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sui-archive-${sui_network}
+  name: sui-archive-${sui_network}${sui_shard}
 spec:
   selector:
     matchLabels:
-      app: sui-archive-${sui_network}
+      app: sui-archive-${sui_network}${sui_shard}
   template:
     metadata:
       labels:
-        app: sui-archive-${sui_network}
+        app: sui-archive-${sui_network}${sui_shard}
     spec:
       containers:
       - name: sui-archive
@@ -22,7 +22,7 @@ spec:
         - name: PGDATABASE
           value: "${namespace}"
         - name: SUI_ARCHIVE_SCHEMA
-          value: "sui_${sui_network}"
+          value: "sui_${sui_network}${sui_shard}"
         - name: PGUSER
           value: "sui_archive"
 #        - name: SUI_ARCHIVE_CRON_SECONDS
@@ -31,6 +31,10 @@ spec:
 #          value: "2023-04-14T00:00:00Z"
 #        - name: SUI_ARCHIVE_END_TIME
 #          value: "2023-04-15T00:00:00Z"
+        - name: SUI_ARCHIVE_CURSOR_TXDIGEST
+          value: ${sui_cursor}
+        - name: SUI_ARCHIVE_CURSOR_EVENTSEQ
+          value: 0
         - name: SUI_ARCHIVE_ENDPOINT
           value: "https://fullnode.${sui_network}.sui.io"
 #        resources:

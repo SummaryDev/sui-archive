@@ -54,6 +54,9 @@ func getArgs() (endpoint string, timeRangeQuery *TimeRangeQuery, startCursor *Ev
 
 	cursorTxDigest := os.Getenv("SUI_ARCHIVE_CURSOR_TXDIGEST") //"Cmocd2cZ5iAJFWgShfvJPtoLy21DNPSiPWz5XKBpQUmH"
 	cursorEventSeq := os.Getenv("SUI_ARCHIVE_CURSOR_EVENTSEQ") //"9"
+
+	log.Printf("cursorTxDigest %v cursorEventSeq %v", cursorTxDigest, cursorEventSeq)
+
 	if cursorTxDigest != "" && cursorEventSeq != "" {
 		startCursor = &EventID{TxDigest: cursorTxDigest, EventSeq: cursorEventSeq}
 	}
@@ -189,20 +192,26 @@ func main() {
 	} else if eventTypeQuery != nil {
 		query(endpoint, dataSourceName, eventTypeQuery, startCursor)
 	} else {
-		maxEventID := queryMaxEventID(dataSourceName)
+		var cursor *EventID
+
+		if startCursor == nil {
+			cursor = queryMaxEventID(dataSourceName)
+		} else {
+			cursor = startCursor
+		}
 
 		q = NewAllQuery()
 
 		for {
-			log.Printf("repating query for all events with cursor %v", maxEventID)
+			log.Printf("repeating query for all events with cursor %v", cursor)
 
-			nomore := query(endpoint, dataSourceName, q, maxEventID)
+			nomore := query(endpoint, dataSourceName, q, cursor)
 
 			if nomore {
-				log.Printf("likely there are no more recent events, sleeping for %v", sleep)
+				log.Printf("no more recent events, sleeping for %v", sleep)
 				time.Sleep(sleep)
 
-				maxEventID = queryMaxEventID(dataSourceName)
+				cursor = queryMaxEventID(dataSourceName)
 			}
 		}
 	}
