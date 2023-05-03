@@ -3,10 +3,12 @@ alter default privileges for role sui_archive in schema sui_${sui_network}${sui_
 alter default privileges for role sui_archive in schema sui_${sui_network}${sui_shard} grant select on tables to superset;
 alter default privileges for role sui_archive in schema sui_${sui_network}${sui_shard} grant select on tables to metabase;
 alter default privileges for role sui_archive in schema sui_${sui_network}${sui_shard} grant select on tables to redash_sui;
+alter default privileges for role sui_archive in schema sui_${sui_network}${sui_shard} grant select on tables to graphile;
 
 set search_path to sui_${sui_network}${sui_shard};
 
-drop table if exists Event cascade;
+-- drop table if exists Event cascade;
+
 create table Event
 (
     txDigest          text,
