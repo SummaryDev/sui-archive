@@ -32,9 +32,9 @@ spec:
 #        - name: SUI_ARCHIVE_END_TIME
 #          value: "2023-04-15T00:00:00Z"
         - name: SUI_ARCHIVE_CURSOR_TXDIGEST
-          value: ${sui_cursor}
+          value: "${sui_cursor}"
         - name: SUI_ARCHIVE_CURSOR_EVENTSEQ
-          value: 0
+          value: "0"
         - name: SUI_ARCHIVE_ENDPOINT
           value: "https://fullnode.${sui_network}.sui.io"
 #        resources:

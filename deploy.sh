@@ -45,4 +45,4 @@ function fun {
 #
 #fun testnet
 
-fun testnet 20230502 EoGbRHczQ8bzWQVrfjb9VHNAgGx3hoaqrYbddwJT2tsf
+fun testnet 20230502 EDbXxHb6G2t2743hKTvvGuq5GQbGBjJWY89izmaaecm2
