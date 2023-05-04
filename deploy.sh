@@ -45,4 +45,6 @@ function fun {
 #
 #fun testnet
 
-fun testnet 20230502 EDbXxHb6G2t2743hKTvvGuq5GQbGBjJWY89izmaaecm2
+#fun testnet 20230502 EDbXxHb6G2t2743hKTvvGuq5GQbGBjJWY89izmaaecm2
+
+fun mainnet

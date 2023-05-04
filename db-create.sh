@@ -4,6 +4,7 @@
 # sui_network=devnet ./db-create.sh
 # sui_network=testnet ./db-create.sh
 # sui_shard=20230502 sui_network=testnet ./db-create.sh
+# sui_network=mainnet ./db-create.sh
 
 source ../infra/env.sh
 
