@@ -99,7 +99,7 @@ func NewAllQuery() *AllQuery {
 }
 
 func queryMaxEventID(dataSourceName string) (maxEventID *EventID) {
-	query := "select txDigest, eventSeq from event order by timestamp desc limit 1"
+	query := "select txDigest, eventSeq from event order by timestamp desc, txDigest, eventSeq desc limit 1"
 
 	db, err := sqlx.Open( /*"postgres"*/ "pgx", dataSourceName)
 	if err != nil {
