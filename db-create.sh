@@ -6,6 +6,8 @@
 # sui_shard=20230502 sui_network=testnet ./db-create.sh
 # sui_network=mainnet ./db-create.sh
 
+export sui_network=${sui_network-mainnet}
+
 source ../infra/env.sh
 
 env | grep '^db' | sort
