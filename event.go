@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"github.com/jmoiron/sqlx"
 	"log"
-	"time"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type EventRpc struct {
@@ -156,13 +156,13 @@ func (t *EventResponseResult) Save(dataSourceName string) (countSaved int64) {
 		log.Fatal(err)
 	}
 
-	insertQuery := "insert into Event (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, type, parsedJson, bcs) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :eventtype, :parsedjson, :bcs) on conflict on constraint Event_pkey do nothing"
+	insertQuery := "insert into Event (txDigest, eventSeq, timestamp, packageId, transactionModule, sender, type, parsedJson, bcs) values (:txdigest, :eventseq, :timestampdb, :packageid, :transactionmodule, :sender, :eventtype, :parsedjson, :bcs)" // todo on conflict on constraint Event_pkey do nothing
 
 	lastEvent := eventsDb[len(eventsDb)-1]
 
 	result, err := db.NamedExec(insertQuery, eventsDb)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%w", err)
 	}
 
 	rows, err := result.RowsAffected()
