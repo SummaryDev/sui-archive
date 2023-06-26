@@ -36,7 +36,8 @@ spec:
         - name: SUI_ARCHIVE_CURSOR_EVENTSEQ
           value: "0"
         - name: SUI_ARCHIVE_ENDPOINT
-          value: "https://fullnode.${sui_network}.sui.io"
+#          value: "https://fullnode.${sui_network}.sui.io"
+          value: "http://sui-${sui_network}:9000"
 #        resources:
 #          limits:
 #            memory: "1024Mi"
