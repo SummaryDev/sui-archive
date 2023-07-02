@@ -9,7 +9,7 @@ set search_path to sui_${sui_network}${sui_shard};
 
 -- drop table if exists Event cascade;
 
-create table Event
+create table if not exists Event
 (
     txDigest          text,
     eventSeq          int,
@@ -48,3 +48,6 @@ comment on column Event.bcs is 'Base 58 encoded bcs bytes of the move event';
 -- comment on table MoveEvent is E'@omit';
 -- comment on table MutateObjectEvent is E'@omit';
 -- comment on table PublishEvent is E'@omit';
+
+comment on table events is E'@omit';
+comment on table addresses is E'@omit';
